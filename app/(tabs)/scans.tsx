@@ -417,7 +417,7 @@ export default function ScansScreen() {
               disabled={isProcessing}
               testID="delete-selected-button"
             >
-              <Trash2 size={16} color={Colors.red[600]} />
+              <Trash2 size={16} color={Colors.gray[600]} />
               <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Delete</Text>
             </TouchableOpacity>
           </View>
@@ -569,11 +569,11 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   deleteButton: {
-    borderColor: Colors.red[300],
-    backgroundColor: Colors.red[50],
+    borderColor: Colors.gray[400],
+    backgroundColor: Colors.gray[100],
   },
   deleteButtonText: {
-    color: Colors.red[600],
+    color: Colors.gray[700],
   },
   searchContainer: {
     marginBottom: 20,
