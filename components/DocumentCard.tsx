@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   pageCountBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.blue[50],
+    backgroundColor: Colors.gray[100],
     borderRadius: 8,
     paddingHorizontal: 6,
     paddingVertical: 2,
