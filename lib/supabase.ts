@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/constants/config';
-import { Database } from '@/types/supabase';
+import { Database, Document } from '@/types/supabase';
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
 import { extractTextFromImage, isOCRConfigured, OCRResult } from '@/lib/ocr';
@@ -25,17 +25,7 @@ export interface DocumentUploadResult {
   thumbnailName: string;
 }
 
-export interface Document {
-  id: string;
-  user_id: string;
-  title: string;
-  file_url: string;
-  thumbnail_url?: string;
-  ocr_text?: string;
-  ocr_processed: boolean;
-  created_at: string;
-  updated_at: string;
-}
+
 
 export interface SaveDocumentParams {
   title: string;
