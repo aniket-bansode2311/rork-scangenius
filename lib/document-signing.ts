@@ -234,4 +234,4 @@ export const fetchSignedDocuments = async (userId: string): Promise<Document[]> 
     console.error('Error fetching signed documents:', error);
     throw error;
   }
-};"
+};
