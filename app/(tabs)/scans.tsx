@@ -508,10 +508,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: Colors.blue[50],
+    backgroundColor: Colors.gray[50],
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.blue[200],
+    borderColor: Colors.gray[200],
     gap: 6,
   },
   selectionButtonText: {
