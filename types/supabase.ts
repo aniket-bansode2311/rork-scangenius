@@ -25,8 +25,29 @@ export type Document = {
   page_count?: number;
   parent_document_id?: string | null;
   page_order?: number;
+  is_signed?: boolean;
+  signed_document_url?: string | null;
+  signature_data?: SignatureData[];
   created_at: string;
   updated_at: string;
+};
+
+export type Signature = {
+  id: string;
+  user_id: string;
+  name: string;
+  signature_data: string; // Base64 encoded signature image
+  created_at: string;
+  updated_at: string;
+};
+
+export type SignatureData = {
+  signature_id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
 };
 
 export type Session = {
@@ -79,6 +100,9 @@ export type Database = {
           page_count?: number;
           parent_document_id?: string | null;
           page_order?: number;
+          is_signed?: boolean;
+          signed_document_url?: string | null;
+          signature_data?: SignatureData[];
         };
         Update: {
           title?: string;
@@ -91,6 +115,21 @@ export type Database = {
           page_count?: number;
           parent_document_id?: string | null;
           page_order?: number;
+          is_signed?: boolean;
+          signed_document_url?: string | null;
+          signature_data?: SignatureData[];
+        };
+      };
+      signatures: {
+        Row: Signature;
+        Insert: {
+          user_id: string;
+          name: string;
+          signature_data: string;
+        };
+        Update: {
+          name?: string;
+          signature_data?: string;
         };
       };
     };
