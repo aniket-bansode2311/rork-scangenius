@@ -90,12 +90,14 @@ const createSignedImageWeb = async (
         const signaturePromises = signatureData.map(async (sigData) => {
           return new Promise<void>((resolveSig, rejectSig) => {
             // Get the signature image from the database
-            supabase
-              .from('signatures')
-              .select('signature_data')
-              .eq('id', sigData.signature_id)
-              .single()
-              .then(({ data: signature, error }) => {
+            const fetchSignature = async () => {
+              try {
+                const { data: signature, error } = await supabase
+                  .from('signatures')
+                  .select('signature_data')
+                  .eq('id', sigData.signature_id)
+                  .single();
+                
                 if (error || !signature) {
                   rejectSig(error || new Error('Signature not found'));
                   return;
@@ -129,8 +131,12 @@ const createSignedImageWeb = async (
                 
                 sigImg.onerror = () => rejectSig(new Error('Failed to load signature image'));
                 sigImg.src = signature.signature_data;
-              })
-              .catch(rejectSig);
+              } catch (error) {
+                rejectSig(error as Error);
+              }
+            };
+            
+            fetchSignature();
           });
         });
         
