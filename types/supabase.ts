@@ -18,6 +18,11 @@ export type Document = {
   title: string;
   file_url: string;
   thumbnail_url: string | null;
+  ocr_text?: string;
+  ocr_processed?: boolean;
+  page_count?: number;
+  parent_document_id?: string | null;
+  page_order?: number;
   created_at: string;
   updated_at: string;
 };
@@ -65,11 +70,21 @@ export type Database = {
           title: string;
           file_url: string;
           thumbnail_url?: string | null;
+          ocr_text?: string;
+          ocr_processed?: boolean;
+          page_count?: number;
+          parent_document_id?: string | null;
+          page_order?: number;
         };
         Update: {
           title?: string;
           file_url?: string;
           thumbnail_url?: string | null;
+          ocr_text?: string;
+          ocr_processed?: boolean;
+          page_count?: number;
+          parent_document_id?: string | null;
+          page_order?: number;
         };
       };
     };

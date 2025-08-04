@@ -354,3 +354,232 @@ export const deleteDocument = async (documentId: string, fileUrl: string, thumbn
     throw error;
   }
 };
+
+// Advanced document editing operations
+
+// Merge multiple documents into a single document
+export const mergeDocuments = async (
+  documents: Document[],
+  newTitle: string,
+  userId: string
+): Promise<Document> => {
+  try {
+    console.log('Merging documents:', documents.map(d => d.id));
+    
+    if (documents.length < 2) {
+      throw new Error('At least 2 documents are required for merging');
+    }
+    
+    const timestamp = Date.now();
+    const fileName = `merged_document_${timestamp}.jpg`;
+    const thumbnailName = `merged_thumbnail_${timestamp}.jpg`;
+    
+    // For now, use the first document's image as the merged image
+    // In a real implementation, you'd combine the images
+    const primaryDocument = documents[0];
+    
+    // Upload the merged document (using first document's image for now)
+    const [fileUrl, thumbnailUrl] = await Promise.all([
+      uploadImageToStorage(primaryDocument.file_url, fileName),
+      uploadImageToStorage(primaryDocument.thumbnail_url || primaryDocument.file_url, thumbnailName)
+    ]);
+    
+    // Combine OCR text from all documents
+    const combinedOcrText = documents
+      .map(doc => doc.ocr_text || '')
+      .filter(text => text.trim())
+      .join('\n\n--- Page Break ---\n\n');
+    
+    // Create the merged document
+    const { data, error } = await supabase
+      .from('documents')
+      .insert({
+        user_id: userId,
+        title: newTitle,
+        file_url: fileUrl,
+        thumbnail_url: thumbnailUrl,
+        ocr_text: combinedOcrText,
+        ocr_processed: true,
+        page_count: documents.length
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error creating merged document:', error);
+      throw error;
+    }
+    
+    // Update original documents to reference the merged document
+    for (let i = 0; i < documents.length; i++) {
+      await supabase
+        .from('documents')
+        .update({
+          parent_document_id: data.id,
+          page_order: i + 1
+        })
+        .eq('id', documents[i].id);
+    }
+    
+    console.log('Documents merged successfully:', data.id);
+    return data as Document;
+  } catch (error) {
+    console.error('Error merging documents:', error);
+    throw error;
+  }
+};
+
+// Split a multi-page document into individual documents
+export const splitDocument = async (
+  document: Document,
+  splitPoints: number[], // Array of page numbers where to split
+  newTitles: string[]
+): Promise<Document[]> => {
+  try {
+    console.log('Splitting document:', document.id, 'at points:', splitPoints);
+    
+    if (!document.page_count || document.page_count <= 1) {
+      throw new Error('Document must have multiple pages to split');
+    }
+    
+    // Get child documents (pages) of the multi-page document
+    const { data: childDocuments, error: fetchError } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('parent_document_id', document.id)
+      .order('page_order');
+    
+    if (fetchError) {
+      console.error('Error fetching child documents:', fetchError);
+      throw fetchError;
+    }
+    
+    if (!childDocuments || childDocuments.length === 0) {
+      throw new Error('No child documents found for splitting');
+    }
+    
+    const splitDocuments: Document[] = [];
+    let currentPageIndex = 0;
+    
+    for (let i = 0; i < splitPoints.length; i++) {
+      const endPage = splitPoints[i];
+      const pagesToInclude = childDocuments.slice(currentPageIndex, endPage);
+      
+      if (pagesToInclude.length === 0) continue;
+      
+      // Create new document for this split
+      const timestamp = Date.now() + i;
+      const fileName = `split_document_${timestamp}.jpg`;
+      const thumbnailName = `split_thumbnail_${timestamp}.jpg`;
+      
+      // Use first page as the main image
+      const primaryPage = pagesToInclude[0];
+      
+      const [fileUrl, thumbnailUrl] = await Promise.all([
+        uploadImageToStorage(primaryPage.file_url, fileName),
+        uploadImageToStorage(primaryPage.thumbnail_url || primaryPage.file_url, thumbnailName)
+      ]);
+      
+      // Combine OCR text from included pages
+      const combinedOcrText = pagesToInclude
+        .map(page => page.ocr_text || '')
+        .filter(text => text.trim())
+        .join('\n\n--- Page Break ---\n\n');
+      
+      const { data: newDocument, error } = await supabase
+        .from('documents')
+        .insert({
+          user_id: document.user_id,
+          title: newTitles[i] || `${document.title} - Part ${i + 1}`,
+          file_url: fileUrl,
+          thumbnail_url: thumbnailUrl,
+          ocr_text: combinedOcrText,
+          ocr_processed: true,
+          page_count: pagesToInclude.length
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error creating split document:', error);
+        throw error;
+      }
+      
+      splitDocuments.push(newDocument as Document);
+      currentPageIndex = endPage;
+    }
+    
+    console.log('Document split successfully into', splitDocuments.length, 'documents');
+    return splitDocuments;
+  } catch (error) {
+    console.error('Error splitting document:', error);
+    throw error;
+  }
+};
+
+// Reorder pages within a multi-page document
+export const reorderDocumentPages = async (
+  documentId: string,
+  newPageOrder: string[] // Array of child document IDs in new order
+): Promise<void> => {
+  try {
+    console.log('Reordering pages for document:', documentId, 'new order:', newPageOrder);
+    
+    // Update page_order for each child document
+    for (let i = 0; i < newPageOrder.length; i++) {
+      const { error } = await supabase
+        .from('documents')
+        .update({ page_order: i + 1 })
+        .eq('id', newPageOrder[i])
+        .eq('parent_document_id', documentId);
+      
+      if (error) {
+        console.error('Error updating page order:', error);
+        throw error;
+      }
+    }
+    
+    console.log('Pages reordered successfully');
+  } catch (error) {
+    console.error('Error reordering pages:', error);
+    throw error;
+  }
+};
+
+// Get child documents (pages) of a multi-page document
+export const getDocumentPages = async (documentId: string): Promise<Document[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('parent_document_id', documentId)
+      .order('page_order');
+    
+    if (error) {
+      console.error('Error fetching document pages:', error);
+      throw error;
+    }
+    
+    return data || [];
+  } catch (error) {
+    console.error('Error getting document pages:', error);
+    throw error;
+  }
+};
+
+// Delete multiple documents
+export const deleteMultipleDocuments = async (documents: Document[]): Promise<void> => {
+  try {
+    console.log('Deleting multiple documents:', documents.map(d => d.id));
+    
+    // Delete each document
+    for (const document of documents) {
+      await deleteDocument(document.id, document.file_url, document.thumbnail_url || '');
+    }
+    
+    console.log('Multiple documents deleted successfully');
+  } catch (error) {
+    console.error('Error deleting multiple documents:', error);
+    throw error;
+  }
+};

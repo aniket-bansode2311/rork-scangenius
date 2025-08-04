@@ -8,7 +8,7 @@ import {
   Dimensions
 } from 'react-native';
 import { Image } from 'expo-image';
-import { MoreVertical, Share, Eye } from 'lucide-react-native';
+import { MoreVertical, Share, Eye, Check, FileStack } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 
 interface Document {
@@ -16,6 +16,7 @@ interface Document {
   title: string;
   file_url: string;
   thumbnail_url: string;
+  page_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -25,6 +26,9 @@ interface DocumentCardProps {
   onView: (document: Document) => void;
   onDelete: (document: Document) => void;
   onShare: (document: Document) => void;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelection?: (document: Document) => void;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -34,7 +38,10 @@ export function DocumentCard({
   document,
   onView,
   onDelete,
-  onShare
+  onShare,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelection
 }: DocumentCardProps) {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -81,10 +88,21 @@ export function DocumentCard({
     );
   };
 
+  const handlePress = () => {
+    if (isSelectionMode && onToggleSelection) {
+      onToggleSelection(document);
+    } else {
+      onView(document);
+    }
+  };
+
   return (
     <TouchableOpacity
-      style={styles.card}
-      onPress={() => onView(document)}
+      style={[
+        styles.card,
+        isSelected && styles.selectedCard
+      ]}
+      onPress={handlePress}
       testID={`document-card-${document.id}`}
     >
       <View style={styles.imageContainer}>
@@ -95,19 +113,36 @@ export function DocumentCard({
           transition={200}
           placeholder="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
         />
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={showActionMenu}
-          testID={`document-menu-${document.id}`}
-        >
-          <MoreVertical size={16} color={Colors.background} />
-        </TouchableOpacity>
+        {isSelectionMode ? (
+          <View style={[
+            styles.selectionButton,
+            isSelected && styles.selectedButton
+          ]}>
+            {isSelected && <Check size={16} color={Colors.background} />}
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={showActionMenu}
+            testID={`document-menu-${document.id}`}
+          >
+            <MoreVertical size={16} color={Colors.background} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.title} numberOfLines={2}>
-          {document.title}
-        </Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title} numberOfLines={2}>
+            {document.title}
+          </Text>
+          {document.page_count && document.page_count > 1 && (
+            <View style={styles.pageCountBadge}>
+              <FileStack size={12} color={Colors.primary} />
+              <Text style={styles.pageCountText}>{document.page_count}</Text>
+            </View>
+          )}
+        </View>
         <Text style={styles.date}>
           {formatDate(document.created_at)}
         </Text>
@@ -145,6 +180,12 @@ const styles = StyleSheet.create({
     elevation: 3,
     marginBottom: 16,
   },
+  selectedCard: {
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.2,
+  },
   imageContainer: {
     position: 'relative',
     width: '100%',
@@ -169,16 +210,54 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  selectionButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 2,
+    borderColor: Colors.gray[300],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selectedButton: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
   content: {
     padding: 12,
     paddingBottom: 8,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
   title: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.gray[900],
-    marginBottom: 4,
     lineHeight: 18,
+    flex: 1,
+    marginRight: 8,
+  },
+  pageCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.blue[50],
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    gap: 2,
+  },
+  pageCountText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   date: {
     fontSize: 12,

@@ -6,15 +6,28 @@ import {
   FlatList, 
   RefreshControl,
   Alert,
-  Platform
+  Platform,
+  TouchableOpacity
 } from 'react-native';
 import { Container } from '@/components/Container';
 import { Colors } from '@/constants/colors';
-import { FileText, RefreshCw } from 'lucide-react-native';
+import { FileText, RefreshCw, CheckSquare, X, Merge, Trash2, ArrowUpDown } from 'lucide-react-native';
 import { Input } from '@/components/Input';
 import { DocumentCard } from '@/components/DocumentCard';
-import { fetchUserDocuments, deleteDocument, searchDocuments, Document } from '@/lib/supabase';
+import { MergeDocumentsDialog } from '@/components/MergeDocumentsDialog';
+import { PageReorderDialog } from '@/components/PageReorderDialog';
+import { 
+  fetchUserDocuments, 
+  deleteDocument, 
+  searchDocuments, 
+  Document,
+  mergeDocuments,
+  deleteMultipleDocuments,
+  getDocumentPages,
+  reorderDocumentPages
+} from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { useDocumentEditing } from '@/context/DocumentEditingContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 
@@ -22,11 +35,27 @@ import { router } from 'expo-router';
 
 export default function ScansScreen() {
   const { user } = useAuth();
+  const {
+    isSelectionMode,
+    selectedDocuments,
+    isProcessing,
+    setSelectionMode,
+    toggleDocumentSelection,
+    clearSelection,
+    selectAllDocuments,
+    isDocumentSelected,
+    setProcessing,
+  } = useDocumentEditing();
+  
   const [documents, setDocuments] = useState<Document[]>([]);
   const [filteredDocuments, setFilteredDocuments] = useState<Document[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [showMergeDialog, setShowMergeDialog] = useState<boolean>(false);
+  const [showReorderDialog, setShowReorderDialog] = useState<boolean>(false);
+  const [reorderDocument, setReorderDocument] = useState<Document | null>(null);
+  const [reorderPages, setReorderPages] = useState<Document[]>([]);
 
   const loadDocuments = useCallback(async (showRefreshing = false) => {
     if (!user) {
@@ -102,6 +131,10 @@ export default function ScansScreen() {
   };
 
   const handleViewDocument = (document: Document) => {
+    if (isSelectionMode) {
+      return;
+    }
+    
     console.log('Viewing document:', document.title);
     // Navigate to document detail screen
     router.push({
@@ -158,12 +191,124 @@ export default function ScansScreen() {
     }
   };
 
+  // Advanced editing handlers
+  const handleStartSelection = () => {
+    setSelectionMode(true);
+  };
+
+  const handleCancelSelection = () => {
+    setSelectionMode(false);
+    clearSelection();
+  };
+
+  const handleSelectAll = () => {
+    selectAllDocuments(filteredDocuments);
+  };
+
+  const handleMergeDocuments = async (title: string) => {
+    try {
+      setProcessing(true);
+      console.log('Merging documents:', selectedDocuments.map(d => d.title));
+      
+      await mergeDocuments(selectedDocuments, title, user!.id);
+      
+      // Refresh documents list
+      await loadDocuments();
+      
+      // Exit selection mode
+      setSelectionMode(false);
+      clearSelection();
+      
+      Alert.alert('Success', `Documents merged into "${title}"`);
+    } catch (error) {
+      console.error('Error merging documents:', error);
+      Alert.alert('Error', 'Failed to merge documents. Please try again.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    Alert.alert(
+      'Delete Documents',
+      `Are you sure you want to delete ${selectedDocuments.length} document(s)? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setProcessing(true);
+              await deleteMultipleDocuments(selectedDocuments);
+              
+              // Refresh documents list
+              await loadDocuments();
+              
+              // Exit selection mode
+              setSelectionMode(false);
+              clearSelection();
+              
+              Alert.alert('Success', 'Documents deleted successfully');
+            } catch (error) {
+              console.error('Error deleting documents:', error);
+              Alert.alert('Error', 'Failed to delete documents. Please try again.');
+            } finally {
+              setProcessing(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleReorderPages = async (document: Document) => {
+    try {
+      console.log('Loading pages for document:', document.id);
+      const pages = await getDocumentPages(document.id);
+      
+      if (pages.length === 0) {
+        Alert.alert('Info', 'This document has no pages to reorder.');
+        return;
+      }
+      
+      setReorderDocument(document);
+      setReorderPages(pages);
+      setShowReorderDialog(true);
+    } catch (error) {
+      console.error('Error loading document pages:', error);
+      Alert.alert('Error', 'Failed to load document pages.');
+    }
+  };
+
+  const handleSavePageOrder = async (newOrder: string[]) => {
+    if (!reorderDocument) return;
+    
+    try {
+      setProcessing(true);
+      await reorderDocumentPages(reorderDocument.id, newOrder);
+      
+      Alert.alert('Success', 'Page order updated successfully');
+      setShowReorderDialog(false);
+      setReorderDocument(null);
+      setReorderPages([]);
+    } catch (error) {
+      console.error('Error reordering pages:', error);
+      throw error;
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const renderDocument = ({ item }: { item: Document }) => (
     <DocumentCard
       document={item}
       onView={handleViewDocument}
       onDelete={handleDeleteDocument}
       onShare={handleShareDocument}
+      isSelectionMode={isSelectionMode}
+      isSelected={isDocumentSelected(item.id)}
+      onToggleSelection={toggleDocumentSelection}
     />
   );
 
@@ -200,18 +345,103 @@ export default function ScansScreen() {
     );
   };
 
+  const renderSelectionHeader = () => {
+    if (!isSelectionMode) {
+      return (
+        <View style={styles.normalHeader}>
+          <TouchableOpacity
+            style={styles.selectionButton}
+            onPress={handleStartSelection}
+            testID="start-selection-button"
+          >
+            <CheckSquare size={20} color={Colors.primary} />
+            <Text style={styles.selectionButtonText}>Select</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.selectionHeader}>
+        <View style={styles.selectionInfo}>
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={handleCancelSelection}
+            disabled={isProcessing}
+            testID="cancel-selection-button"
+          >
+            <X size={20} color={Colors.gray[600]} />
+          </TouchableOpacity>
+          <Text style={styles.selectionCount}>
+            {selectedDocuments.length} selected
+          </Text>
+          <TouchableOpacity
+            style={styles.selectAllButton}
+            onPress={handleSelectAll}
+            disabled={isProcessing}
+            testID="select-all-button"
+          >
+            <Text style={styles.selectAllText}>Select All</Text>
+          </TouchableOpacity>
+        </View>
+        
+        {selectedDocuments.length > 0 && (
+          <View style={styles.selectionActions}>
+            {selectedDocuments.length >= 2 && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => setShowMergeDialog(true)}
+                disabled={isProcessing}
+                testID="merge-button"
+              >
+                <Merge size={16} color={Colors.primary} />
+                <Text style={styles.actionButtonText}>Merge</Text>
+              </TouchableOpacity>
+            )}
+            
+            {selectedDocuments.length === 1 && selectedDocuments[0].page_count && selectedDocuments[0].page_count > 1 && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => handleReorderPages(selectedDocuments[0])}
+                disabled={isProcessing}
+                testID="reorder-button"
+              >
+                <ArrowUpDown size={16} color={Colors.primary} />
+                <Text style={styles.actionButtonText}>Reorder</Text>
+              </TouchableOpacity>
+            )}
+            
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={handleDeleteSelected}
+              disabled={isProcessing}
+              testID="delete-selected-button"
+            >
+              <Trash2 size={16} color={Colors.red[600]} />
+              <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <Container>
       <View style={styles.container}>
-        <View style={styles.searchContainer}>
-          <Input
-            placeholder="Search documents and text content..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={styles.searchInput}
-            testID="search-input"
-          />
-        </View>
+        {renderSelectionHeader()}
+        
+        {!isSelectionMode && (
+          <View style={styles.searchContainer}>
+            <Input
+              placeholder="Search documents and text content..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={styles.searchInput}
+              testID="search-input"
+            />
+          </View>
+        )}
 
         <FlatList
           data={filteredDocuments}
@@ -235,6 +465,29 @@ export default function ScansScreen() {
           showsVerticalScrollIndicator={false}
           testID="documents-list"
         />
+        
+        <MergeDocumentsDialog
+          visible={showMergeDialog}
+          documents={selectedDocuments}
+          onClose={() => setShowMergeDialog(false)}
+          onMerge={handleMergeDocuments}
+          isProcessing={isProcessing}
+        />
+        
+        {reorderDocument && (
+          <PageReorderDialog
+            visible={showReorderDialog}
+            document={reorderDocument}
+            pages={reorderPages}
+            onClose={() => {
+              setShowReorderDialog(false);
+              setReorderDocument(null);
+              setReorderPages([]);
+            }}
+            onReorder={handleSavePageOrder}
+            isProcessing={isProcessing}
+          />
+        )}
       </View>
     </Container>
   );
@@ -244,6 +497,83 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
+  },
+  normalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 16,
+  },
+  selectionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: Colors.blue[50],
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.blue[200],
+    gap: 6,
+  },
+  selectionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  selectionHeader: {
+    marginBottom: 16,
+  },
+  selectionInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  cancelButton: {
+    padding: 4,
+  },
+  selectionCount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.gray[900],
+    flex: 1,
+    textAlign: 'center',
+  },
+  selectAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  selectAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  selectionActions: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: Colors.background,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.gray[300],
+    gap: 6,
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  deleteButton: {
+    borderColor: Colors.red[300],
+    backgroundColor: Colors.red[50],
+  },
+  deleteButtonText: {
+    color: Colors.red[600],
   },
   searchContainer: {
     marginBottom: 20,

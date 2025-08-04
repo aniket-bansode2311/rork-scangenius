@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS public.documents (
   thumbnail_url TEXT,
   ocr_text TEXT,
   ocr_processed BOOLEAN DEFAULT FALSE,
+  page_count INTEGER DEFAULT 1,
+  parent_document_id UUID REFERENCES public.documents(id) ON DELETE CASCADE,
+  page_order INTEGER,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -114,6 +117,8 @@ CREATE INDEX IF NOT EXISTS documents_created_at_idx ON public.documents(created_
 CREATE INDEX IF NOT EXISTS documents_title_idx ON public.documents(title);
 CREATE INDEX IF NOT EXISTS documents_ocr_text_idx ON public.documents USING gin(to_tsvector('english', ocr_text));
 CREATE INDEX IF NOT EXISTS documents_ocr_processed_idx ON public.documents(ocr_processed);
+CREATE INDEX IF NOT EXISTS documents_parent_document_id_idx ON public.documents(parent_document_id);
+CREATE INDEX IF NOT EXISTS documents_page_order_idx ON public.documents(page_order);
 
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
