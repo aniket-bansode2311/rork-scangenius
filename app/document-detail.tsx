@@ -11,9 +11,10 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { Share, Download, ArrowLeft, MoreVertical, FileText, RefreshCw, Copy } from 'lucide-react-native';
+import { Share, Download, ArrowLeft, MoreVertical, FileText, RefreshCw, Copy, Cloud } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { Container } from '@/components/Container';
+import { CloudExportDialog } from '@/components/CloudExportDialog';
 import { deleteDocument, getDocumentOCRText, reprocessDocumentOCR } from '@/lib/supabase';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -34,6 +35,7 @@ export default function DocumentDetailScreen() {
   const [ocrText, setOcrText] = useState<string | null>(params.ocr_text || null);
   const [ocrLoading, setOcrLoading] = useState<boolean>(false);
   const [showOcrText, setShowOcrText] = useState<boolean>(false);
+  const [showCloudExport, setShowCloudExport] = useState<boolean>(false);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -157,6 +159,10 @@ export default function DocumentDetailScreen() {
 
   const showActionMenu = () => {
     const actions = [
+      {
+        text: 'Export to Cloud',
+        onPress: () => setShowCloudExport(true)
+      },
       {
         text: 'Share',
         onPress: handleShare
@@ -310,25 +316,42 @@ export default function DocumentDetailScreen() {
         <View style={styles.actionsContainer}>
           <TouchableOpacity
             style={[styles.actionButton, styles.primaryButton]}
-            onPress={handleShare}
+            onPress={() => setShowCloudExport(true)}
             disabled={loading}
-            testID="share-button"
+            testID="cloud-export-button"
           >
-            <Share size={20} color={Colors.background} />
-            <Text style={styles.primaryButtonText}>Share</Text>
+            <Cloud size={20} color={Colors.background} />
+            <Text style={styles.primaryButtonText}>Export</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.actionButton, styles.secondaryButton]}
+            onPress={handleShare}
+            disabled={loading}
+            testID="share-button"
+          >
+            <Share size={20} color={Colors.primary} />
+            <Text style={styles.secondaryButtonText}>Share</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, styles.tertiaryButton]}
             onPress={handleDownload}
             disabled={loading}
             testID="download-button"
           >
-            <Download size={20} color={Colors.primary} />
-            <Text style={styles.secondaryButtonText}>Download</Text>
+            <Download size={20} color={Colors.gray[600]} />
+            <Text style={styles.tertiaryButtonText}>Download</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
+      
+      <CloudExportDialog
+        visible={showCloudExport}
+        onClose={() => setShowCloudExport(false)}
+        documentTitle={params.title}
+        documentUrl={params.file_url}
+      />
     </Container>
   );
 }
@@ -391,17 +414,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 20,
     paddingTop: 0,
-    gap: 12,
+    gap: 8,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    gap: 6,
   },
   primaryButton: {
     backgroundColor: Colors.primary,
@@ -412,14 +435,24 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   primaryButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: Colors.background,
   },
   secondaryButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: Colors.primary,
+  },
+  tertiaryButton: {
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.gray[300],
+  },
+  tertiaryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.gray[600],
   },
   ocrContainer: {
     marginTop: 20,
