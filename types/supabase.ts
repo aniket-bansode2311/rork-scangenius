@@ -20,6 +20,8 @@ export type Document = {
   thumbnail_url: string | null;
   ocr_text?: string;
   ocr_processed?: boolean;
+  tags?: string[];
+  ai_processed?: boolean;
   page_count?: number;
   parent_document_id?: string | null;
   page_order?: number;
@@ -72,6 +74,8 @@ export type Database = {
           thumbnail_url?: string | null;
           ocr_text?: string;
           ocr_processed?: boolean;
+          tags?: string[];
+          ai_processed?: boolean;
           page_count?: number;
           parent_document_id?: string | null;
           page_order?: number;
@@ -82,6 +86,8 @@ export type Database = {
           thumbnail_url?: string | null;
           ocr_text?: string;
           ocr_processed?: boolean;
+          tags?: string[];
+          ai_processed?: boolean;
           page_count?: number;
           parent_document_id?: string | null;
           page_order?: number;

@@ -28,6 +28,7 @@ import { Button } from '@/components/Button';
 import { SaveDocumentDialog } from '@/components/SaveDocumentDialog';
 import { saveDocumentToDatabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { extractTextFromImage, isOCRConfigured } from '@/lib/ocr';
 
 
 
@@ -58,6 +59,31 @@ export default function PhotoPreviewScreen() {
   const [cropBounds, setCropBounds] = useState<CropBounds | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [showSaveDialog, setShowSaveDialog] = useState<boolean>(false);
+  const [ocrText, setOcrText] = useState<string>('');
+  const [isPerformingOCR, setIsPerformingOCR] = useState<boolean>(false);
+
+  const performOCR = useCallback(async () => {
+    if (!photoUri) return;
+    
+    try {
+      setIsPerformingOCR(true);
+      console.log('Starting OCR processing...');
+      
+      const ocrConfigured = await isOCRConfigured();
+      if (!ocrConfigured) {
+        console.log('OCR not configured, skipping text extraction');
+        return;
+      }
+      
+      const result = await extractTextFromImage(photoUri);
+      setOcrText(result.text);
+      console.log('OCR completed, extracted text length:', result.text.length);
+    } catch (error) {
+      console.error('OCR processing failed:', error);
+    } finally {
+      setIsPerformingOCR(false);
+    }
+  }, [photoUri]);
 
   const detectDocumentBorders = useCallback(async () => {
     try {
@@ -88,8 +114,9 @@ export default function PhotoPreviewScreen() {
   useEffect(() => {
     if (photoUri) {
       detectDocumentBorders();
+      performOCR();
     }
-  }, [photoUri, detectDocumentBorders]);
+  }, [photoUri, detectDocumentBorders, performOCR]);
 
   if (!photoUri) {
     return (
@@ -161,7 +188,7 @@ export default function PhotoPreviewScreen() {
     setShowSaveDialog(true);
   };
 
-  const handleSaveDocument = async (title: string) => {
+  const handleSaveDocument = async (title: string, tags: string[] = []) => {
     if (!user || !photoUri) {
       throw new Error('Missing user or photo data');
     }
@@ -169,11 +196,13 @@ export default function PhotoPreviewScreen() {
     try {
       console.log('Processing and saving document:', {
         title,
+        tags,
         uri: photoUri,
         filter: currentFilter,
         rotation,
         cropBounds,
-        userId: user.id
+        userId: user.id,
+        ocrTextLength: ocrText.length
       });
 
       // Apply processing steps (simulated)
@@ -186,11 +215,13 @@ export default function PhotoPreviewScreen() {
       console.log(`Applying ${currentFilter} filter and ${rotation}° rotation...`);
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Save to Supabase
+      // Save to Supabase with OCR text and tags
       const savedDocument = await saveDocumentToDatabase({
         title,
         imageUri: photoUri,
-        userId: user.id
+        userId: user.id,
+        ocrText: ocrText || undefined,
+        tags: tags.length > 0 ? tags : undefined
       });
 
       console.log('Document saved successfully:', savedDocument);
@@ -393,9 +424,11 @@ onLoad={() => {
           )}
           
           {/* Processing indicator */}
-          {isProcessing && (
+          {(isProcessing || isPerformingOCR) && (
             <View style={styles.processingOverlay}>
-              <Text style={styles.processingText}>Processing...</Text>
+              <Text style={styles.processingText}>
+                {isPerformingOCR ? 'Extracting text...' : 'Processing...'}
+              </Text>
             </View>
           )}
         </View>
@@ -498,6 +531,7 @@ onLoad={() => {
         visible={showSaveDialog}
         onClose={() => setShowSaveDialog(false)}
         onSave={handleSaveDocument}
+        ocrText={ocrText}
       />
     </View>
   );

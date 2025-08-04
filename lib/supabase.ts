@@ -5,6 +5,7 @@ import { Database } from '@/types/supabase';
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
 import { extractTextFromImage, isOCRConfigured, OCRResult } from '@/lib/ocr';
+import { analyzeDocumentContent } from '@/lib/ai-organization';
 
 // Create Supabase client with AsyncStorage for session persistence
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -40,6 +41,8 @@ export interface SaveDocumentParams {
   title: string;
   imageUri: string;
   userId: string;
+  ocrText?: string;
+  tags?: string[];
 }
 
 // Generate thumbnail from image
@@ -136,7 +139,7 @@ export const saveDocumentToDatabase = async (params: SaveDocumentParams): Promis
       uploadImageToStorage(thumbnailUri, thumbnailName)
     ]);
     
-    // Save document metadata to database (without OCR initially)
+    // Save document metadata to database
     const { data, error } = await supabase
       .from('documents')
       .insert({
@@ -144,7 +147,10 @@ export const saveDocumentToDatabase = async (params: SaveDocumentParams): Promis
         title: params.title,
         file_url: fileUrl,
         thumbnail_url: thumbnailUrl,
-        ocr_processed: false
+        ocr_text: params.ocrText || null,
+        ocr_processed: !!params.ocrText,
+        tags: params.tags || [],
+        ai_processed: false
       })
       .select()
       .single();
@@ -156,10 +162,17 @@ export const saveDocumentToDatabase = async (params: SaveDocumentParams): Promis
     
     console.log('Document saved successfully:', data);
     
-    // Process OCR in background (don't wait for it)
-    processDocumentOCR(data.id, params.imageUri).catch(error => {
-      console.error('Background OCR processing failed:', error);
-    });
+    // If OCR text is provided and tags are not, trigger AI processing in background
+    if (params.ocrText && (!params.tags || params.tags.length === 0)) {
+      processDocumentAI(data.id, params.ocrText, params.title).catch(error => {
+        console.error('Background AI processing failed:', error);
+      });
+    } else if (!params.ocrText) {
+      // Process OCR in background if not provided
+      processDocumentOCR(data.id, params.imageUri).catch(error => {
+        console.error('Background OCR processing failed:', error);
+      });
+    }
     
     return data as Document;
   } catch (error) {
@@ -188,6 +201,47 @@ export const fetchUserDocuments = async (userId: string) => {
     return data || [];
   } catch (error) {
     console.error('Error fetching documents:', error);
+    throw error;
+  }
+};
+
+// Process AI organization for a document
+export const processDocumentAI = async (documentId: string, ocrText: string, currentTitle: string): Promise<void> => {
+  try {
+    console.log('Processing AI organization for document:', documentId);
+    
+    const aiResult = await analyzeDocumentContent({
+      text: ocrText,
+      currentTitle
+    });
+    
+    // Update document with AI-generated tags and improved title
+    const { error } = await supabase
+      .from('documents')
+      .update({
+        tags: aiResult.suggestedTags,
+        ai_processed: true
+      })
+      .eq('id', documentId);
+    
+    if (error) {
+      console.error('Error updating document with AI suggestions:', error);
+      throw error;
+    }
+    
+    console.log('AI processing completed for document:', documentId, {
+      tagsCount: aiResult.suggestedTags.length,
+      confidence: aiResult.confidence
+    });
+  } catch (error) {
+    console.error('Error processing AI organization:', error);
+    
+    // Mark as processed even if failed to avoid infinite retries
+    await supabase
+      .from('documents')
+      .update({ ai_processed: true })
+      .eq('id', documentId);
+    
     throw error;
   }
 };
@@ -223,6 +277,22 @@ export const processDocumentOCR = async (documentId: string, imageUri: string): 
       textLength: ocrResult.text.length,
       confidence: ocrResult.confidence
     });
+    
+    // Trigger AI processing after OCR is complete
+    if (ocrResult.text && ocrResult.text.trim().length > 0) {
+      // Get current document title for AI processing
+      const { data: document } = await supabase
+        .from('documents')
+        .select('title')
+        .eq('id', documentId)
+        .single();
+      
+      if (document) {
+        processDocumentAI(documentId, ocrResult.text, document.title).catch(error => {
+          console.error('Background AI processing failed:', error);
+        });
+      }
+    }
   } catch (error) {
     console.error('Error processing OCR:', error);
     
@@ -249,7 +319,7 @@ export const searchDocuments = async (userId: string, query: string): Promise<Do
       .from('documents')
       .select('*')
       .eq('user_id', userId)
-      .or(`title.ilike.%${query}%,ocr_text.ilike.%${query}%`)
+      .or(`title.ilike.%${query}%,ocr_text.ilike.%${query}%,tags.cs.{"${query}"}`)
       .order('created_at', { ascending: false });
     
     if (error) {

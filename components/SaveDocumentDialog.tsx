@@ -9,26 +9,33 @@ import {
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
-import { X } from 'lucide-react-native';
+import { X, Sparkles } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
+import SmartSuggestionsDialog from '@/components/SmartSuggestionsDialog';
 
 interface SaveDocumentDialogProps {
   visible: boolean;
   onClose: () => void;
-  onSave: (title: string) => Promise<void>;
+  onSave: (title: string, tags?: string[]) => Promise<void>;
   loading?: boolean;
+  ocrText?: string;
+  currentTags?: string[];
 }
 
 export function SaveDocumentDialog({
   visible,
   onClose,
   onSave,
-  loading = false
+  loading = false,
+  ocrText = '',
+  currentTags = []
 }: SaveDocumentDialogProps) {
   const [title, setTitle] = useState<string>('');
+  const [tags, setTags] = useState<string[]>(currentTags);
   const [saving, setSaving] = useState<boolean>(false);
+  const [showSmartSuggestions, setShowSmartSuggestions] = useState<boolean>(false);
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -38,8 +45,9 @@ export function SaveDocumentDialog({
 
     try {
       setSaving(true);
-      await onSave(title.trim());
+      await onSave(title.trim(), tags);
       setTitle('');
+      setTags([]);
       onClose();
     } catch (error) {
       console.error('Error saving document:', error);
@@ -52,8 +60,27 @@ export function SaveDocumentDialog({
   const handleClose = () => {
     if (!saving && !loading) {
       setTitle('');
+      setTags([]);
       onClose();
     }
+  };
+
+  const handleSmartSuggestions = () => {
+    if (ocrText && ocrText.trim().length > 0) {
+      setShowSmartSuggestions(true);
+    } else {
+      Alert.alert('No Content', 'No text content available for AI analysis.');
+    }
+  };
+
+  const handleApplySuggestions = (suggestedTitle: string, suggestedTags: string[]) => {
+    setTitle(suggestedTitle);
+    setTags(suggestedTags);
+    setShowSmartSuggestions(false);
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setTags(tags.filter(tag => tag !== tagToRemove));
   };
 
   return (
@@ -89,7 +116,19 @@ export function SaveDocumentDialog({
             </View>
 
             <View style={styles.content}>
-              <Text style={styles.label}>Document Title</Text>
+              <View style={styles.titleSection}>
+                <Text style={styles.label}>Document Title</Text>
+                {ocrText && ocrText.trim().length > 0 && (
+                  <TouchableOpacity
+                    style={styles.smartButton}
+                    onPress={handleSmartSuggestions}
+                    disabled={saving || loading}
+                  >
+                    <Sparkles size={16} color={Colors.primary} />
+                    <Text style={styles.smartButtonText}>AI Suggestions</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <Input
                 value={title}
                 onChangeText={setTitle}
@@ -99,6 +138,25 @@ export function SaveDocumentDialog({
                 editable={!saving && !loading}
                 testID="document-title-input"
               />
+              
+              {tags.length > 0 && (
+                <View style={styles.tagsSection}>
+                  <Text style={styles.label}>Tags</Text>
+                  <View style={styles.tagsContainer}>
+                    {tags.map((tag, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={styles.tag}
+                        onPress={() => handleRemoveTag(tag)}
+                        disabled={saving || loading}
+                      >
+                        <Text style={styles.tagText}>{tag}</Text>
+                        <X size={12} color={Colors.gray[600]} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
 
             <View style={styles.actions}>
@@ -121,6 +179,15 @@ export function SaveDocumentDialog({
           </TouchableOpacity>
         </TouchableOpacity>
       </KeyboardAvoidingView>
+      
+      <SmartSuggestionsDialog
+        visible={showSmartSuggestions}
+        onClose={() => setShowSmartSuggestions(false)}
+        onApply={handleApplySuggestions}
+        ocrText={ocrText}
+        currentTitle={title}
+        currentTags={tags}
+      />
     </Modal>
   );
 }
@@ -202,5 +269,51 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: Colors.primary,
+  },
+  titleSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  smartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: Colors.gray[100],
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  smartButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.primary,
+    marginLeft: 4,
+  },
+  tagsSection: {
+    marginTop: 16,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+  },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  tagText: {
+    color: Colors.background,
+    fontSize: 12,
+    fontWeight: '500',
+    marginRight: 4,
   },
 });
