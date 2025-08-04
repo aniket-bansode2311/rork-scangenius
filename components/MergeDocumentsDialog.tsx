@@ -286,10 +286,10 @@ const styles = StyleSheet.create({
   infoBox: {
     flexDirection: 'row',
     padding: 16,
-    backgroundColor: Colors.blue[50],
+    backgroundColor: Colors.gray[50],
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.blue[200],
+    borderColor: Colors.gray[200],
     gap: 12,
   },
   infoContent: {
