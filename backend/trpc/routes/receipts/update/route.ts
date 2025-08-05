@@ -1,3 +1,4 @@
+//backend/trpc/routes/receipts/update/route.ts
 import { z } from 'zod';
 import { protectedProcedure } from '../../../create-context';
 
@@ -26,15 +27,28 @@ const ReceiptDataSchema = z.object({
   extracted_at: z.string().optional()
 });
 
+// Define types for better type safety
+type ReceiptData = z.infer<typeof ReceiptDataSchema>;
+
+interface TRPCContext {
+  user: {
+    id: string;
+  };
+  supabase: any; // Replace with proper Supabase client type if available
+}
+
 export const updateReceiptProcedure = protectedProcedure
   .input(z.object({
     documentId: z.string().uuid(),
     receiptData: ReceiptDataSchema
   }))
-  .mutation(async ({ input, ctx }) => {
+  .mutation(async ({ input, ctx }: { 
+    input: { documentId: string; receiptData: ReceiptData }, 
+    ctx: TRPCContext 
+  }) => {
     const { documentId, receiptData } = input;
     const userId = ctx.user.id;
-
+    
     try {
       // Verify document ownership
       const { data: document, error: fetchError } = await ctx.supabase
@@ -43,11 +57,11 @@ export const updateReceiptProcedure = protectedProcedure
         .eq('id', documentId)
         .eq('user_id', userId)
         .single();
-
+      
       if (fetchError || !document) {
         throw new Error('Document not found or access denied');
       }
-
+      
       // Update receipt data
       const { error: updateError } = await ctx.supabase
         .from('documents')
@@ -57,16 +71,15 @@ export const updateReceiptProcedure = protectedProcedure
         })
         .eq('id', documentId)
         .eq('user_id', userId);
-
+      
       if (updateError) {
         throw new Error('Failed to update receipt data');
       }
-
+      
       return {
         success: true,
         message: 'Receipt data updated successfully'
       };
-
     } catch (error) {
       console.error('Receipt update error:', error);
       throw new Error(error instanceof Error ? error.message : 'Failed to update receipt data');
