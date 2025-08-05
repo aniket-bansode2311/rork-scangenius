@@ -5,6 +5,25 @@
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
+// API Configuration
+export const RORK_API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || '';
+
+// Validate required environment variables
+if (!SUPABASE_URL) {
+  console.error('Missing EXPO_PUBLIC_SUPABASE_URL environment variable');
+}
+
+if (!SUPABASE_ANON_KEY) {
+  console.error('Missing EXPO_PUBLIC_SUPABASE_ANON_KEY environment variable');
+}
+
+// Optional: Log configuration status (remove in production)
+console.log('Config loaded:', {
+  supabaseUrl: SUPABASE_URL ? '✓ Set' : '✗ Missing',
+  supabaseKey: SUPABASE_ANON_KEY ? '✓ Set' : '✗ Missing',
+  rorkApiUrl: RORK_API_BASE_URL ? '✓ Set' : '✗ Missing (optional)',
+});
+
 // Google Cloud Vision API Configuration
 // Replace with your actual Google Cloud Vision API key
 // You can get this from Google Cloud Console > APIs & Services > Credentials
