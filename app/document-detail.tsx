@@ -7,7 +7,8 @@ import {
   Alert,
   Platform,
   Dimensions,
-  ScrollView
+  ScrollView,
+  AlertButton
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
@@ -61,12 +62,12 @@ export default function DocumentDetailScreen() {
 
   // tRPC mutations
   const extractReceiptMutation = trpc.receipts.extract.useMutation({
-    onSuccess: (result) => {
+    onSuccess: (result: { data: ReceiptData }) => {
       setReceiptData(result.data);
       setReceiptExtracting(false);
       Alert.alert('Success', 'Receipt data extracted successfully!');
     },
-    onError: (error) => {
+    onError: (error: { message: string }) => {
       setReceiptExtracting(false);
       Alert.alert('Error', error.message);
     },
@@ -213,7 +214,7 @@ export default function DocumentDetailScreen() {
   };
 
   const showActionMenu = () => {
-    const actions = [
+    const actions: AlertButton[] = [
       {
         text: 'Export to Cloud',
         onPress: () => setShowCloudExport(true)
@@ -257,10 +258,10 @@ export default function DocumentDetailScreen() {
     actions.push(
       {
         text: 'Delete',
-        style: 'destructive' as const,
+        style: 'destructive',
         onPress: handleDelete
       },
-      { text: 'Cancel', style: 'cancel' as const }
+      { text: 'Cancel', style: 'cancel' }
     );
 
     Alert.alert('Document Actions', 'Choose an action', actions);
@@ -611,7 +612,7 @@ const styles = StyleSheet.create({
   },
   ocrTextContainer: {
     marginTop: 12,
-    backgroundColor: Colors.gray[50],
+    backgroundColor: Colors.gray[100],
     borderRadius: 8,
     padding: 16,
   },
@@ -672,7 +673,7 @@ const styles = StyleSheet.create({
   },
   receiptDataContainer: {
     marginTop: 12,
-    backgroundColor: Colors.gray[50],
+    backgroundColor: Colors.gray[100],
     borderRadius: 8,
     overflow: 'hidden',
   },
@@ -710,7 +711,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     padding: 16,
-    backgroundColor: Colors.gray[50],
+    backgroundColor: Colors.gray[100],
     borderRadius: 8,
     marginTop: 20,
   },
