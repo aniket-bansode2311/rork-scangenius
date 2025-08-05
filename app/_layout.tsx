@@ -7,6 +7,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { DocumentEditingProvider } from "@/context/DocumentEditingContext";
 import { AuthGuard } from "@/components/AuthGuard";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { trpc, trpcClient } from "@/lib/trpc";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -31,18 +32,20 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <SafeAreaProvider>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <AuthProvider>
-            <DocumentEditingProvider>
-              <AuthGuard>
-                <RootLayoutNav />
-              </AuthGuard>
-            </DocumentEditingProvider>
-          </AuthProvider>
-        </GestureHandlerRootView>
-      </SafeAreaProvider>
-    </QueryClientProvider>
+    <trpc.Provider client={trpcClient} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <SafeAreaProvider>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <AuthProvider>
+              <DocumentEditingProvider>
+                <AuthGuard>
+                  <RootLayoutNav />
+                </AuthGuard>
+              </DocumentEditingProvider>
+            </AuthProvider>
+          </GestureHandlerRootView>
+        </SafeAreaProvider>
+      </QueryClientProvider>
+    </trpc.Provider>
   );
 }
