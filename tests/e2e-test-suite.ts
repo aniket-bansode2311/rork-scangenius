@@ -4,8 +4,9 @@ import { supabase } from '@/lib/supabase';
 import { extractTextFromImage, isOCRConfigured } from '@/lib/ocr';
 import { extractReceiptData } from '@/lib/receipt-extraction';
 import { analyzeDocumentContent } from '@/lib/ai-organization';
-import { exportToCloudStorage } from '@/lib/cloud-storage';
-import { createSignature, signDocument } from '@/lib/document-signing';
+import { cloudStorageService } from '@/lib/cloud-storage';
+import { signDocument } from '@/lib/document-signing';
+import { saveSignature } from '@/lib/signatures';
 
 // Test Results Interface
 interface TestResult {
@@ -362,7 +363,7 @@ class E2ETestSuite {
     await this.addTest('Cloud Export', async () => {
       // Test cloud storage export
       try {
-        await exportToCloudStorage('test-doc.pdf', 'google-drive', 'mock-token');
+        await cloudStorageService.uploadDocument('google-drive', 'test-doc', 'https://example.com/test.pdf');
         console.log('Cloud export test completed');
       } catch (error) {
         // Expected to fail without proper credentials
@@ -372,7 +373,11 @@ class E2ETestSuite {
 
     await this.addTest('Digital Signatures', async () => {
       // Test digital signature functionality
-      const signature = await createSignature('Test Signature', 'test-signature-data');
+      const signature = await saveSignature({
+        user_id: 'test-user-123',
+        name: 'Test Signature',
+        signature_data: 'test-signature-data'
+      });
       if (!signature) {
         throw new Error('Failed to create signature');
       }
