@@ -1,3 +1,4 @@
+//backend/trpc/routes/receipts/check/route.ts
 import { z } from 'zod';
 import { protectedProcedure } from '../../../create-context';
 
@@ -5,9 +6,9 @@ export const checkReceiptProcedure = protectedProcedure
   .input(z.object({
     ocrText: z.string().min(1)
   }))
-  .query(async ({ input }) => {
+  .query(async ({ input }: { input: { ocrText: string } }) => {
     const { ocrText } = input;
-
+    
     try {
       const receiptKeywords = [
         'receipt', 'total', 'subtotal', 'tax', 'amount', 'paid', 'change',
@@ -15,7 +16,6 @@ export const checkReceiptProcedure = protectedProcedure
         'restaurant', 'cafe', 'shop', 'market', 'purchase', 'sale',
         'qty', 'quantity', 'price', 'item', 'product', 'service'
       ];
-
       const currencySymbols = ['$', '€', '£', '¥', '₹', '₽'];
       
       const text = ocrText.toLowerCase();
@@ -41,7 +41,7 @@ export const checkReceiptProcedure = protectedProcedure
       const isLikelyReceipt = (keywordMatches >= 2 && hasCurrency) ||
                              priceMatches.length >= 3 ||
                              (text.includes('total') && priceMatches.length >= 1);
-
+      
       return {
         isLikelyReceipt,
         confidence: isLikelyReceipt ? Math.min(90, keywordMatches * 10 + priceMatches.length * 5) : 0,
@@ -51,7 +51,6 @@ export const checkReceiptProcedure = protectedProcedure
           priceMatches: priceMatches.length
         }
       };
-
     } catch (error) {
       console.error('Receipt check error:', error);
       return {
