@@ -20,12 +20,12 @@ import {
   fetchUserDocuments, 
   deleteDocument, 
   searchDocuments, 
-  Document,
   mergeDocuments,
   deleteMultipleDocuments,
   getDocumentPages,
   reorderDocumentPages
 } from '@/lib/supabase';
+import { Document } from '@/types/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useDocumentEditing } from '@/context/DocumentEditingContext';
 import { useFocusEffect } from '@react-navigation/native';
@@ -146,9 +146,7 @@ export default function ScansScreen() {
         thumbnail_url: document.thumbnail_url || '',
         created_at: document.created_at,
         ocr_text: document.ocr_text || '',
-        ocr_processed: document.ocr_processed ? 'true' : 'false',
-        receipt_data: document.receipt_data ? JSON.stringify(document.receipt_data) : '',
-        receipt_processed: document.receipt_processed ? 'true' : 'false'
+        ocr_processed: document.ocr_processed ? 'true' : 'false'
       }
     });
   };
