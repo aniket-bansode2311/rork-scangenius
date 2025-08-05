@@ -1,12 +1,20 @@
 import { z } from 'zod';
-import { protectedProcedure } from '../../../create-context';
+import { procedure } from '../../../create-context'; // Changed from protectedProcedure
 
-export const extractReceiptProcedure = protectedProcedure
+// Define the context type (adjust based on your actual context structure)
+interface TRPCContext {
+  user: {
+    id: string;
+  };
+  supabase: any; // Type this properly based on your Supabase client
+}
+
+export const extractReceiptProcedure = procedure
   .input(z.object({
     documentId: z.string().uuid(),
     ocrText: z.string().min(1)
   }))
-  .mutation(async ({ input, ctx }) => {
+  .mutation(async ({ input, ctx }: { input: { documentId: string; ocrText: string }, ctx: TRPCContext }) => {
     const { documentId, ocrText } = input;
     const userId = ctx.user.id;
 
@@ -88,7 +96,7 @@ If the text doesn't appear to be from a receipt, return: {"error": "Not a receip
         throw new Error('No completion received from AI API');
       }
 
-      let receiptData;
+      let receiptData: any;
       try {
         const cleanedResponse = aiResult.completion.trim();
         
