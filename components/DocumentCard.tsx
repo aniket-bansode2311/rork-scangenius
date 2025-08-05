@@ -8,7 +8,7 @@ import {
   Dimensions
 } from 'react-native';
 import { Image } from 'expo-image';
-import { MoreVertical, Share, Eye, Check, FileStack } from 'lucide-react-native';
+import { MoreVertical, Share, Eye, Check, FileStack, Receipt } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 
 interface Document {
@@ -17,6 +17,8 @@ interface Document {
   file_url: string;
   thumbnail_url: string;
   page_count?: number;
+  receipt_data?: any;
+  receipt_processed?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -136,12 +138,19 @@ export function DocumentCard({
           <Text style={styles.title} numberOfLines={2}>
             {document.title}
           </Text>
-          {document.page_count && document.page_count > 1 && (
-            <View style={styles.pageCountBadge}>
-              <FileStack size={12} color={Colors.primary} />
-              <Text style={styles.pageCountText}>{document.page_count}</Text>
-            </View>
-          )}
+          <View style={styles.badges}>
+            {document.receipt_data && (
+              <View style={styles.receiptBadge}>
+                <Receipt size={10} color={Colors.background} />
+              </View>
+            )}
+            {document.page_count && document.page_count > 1 && (
+              <View style={styles.pageCountBadge}>
+                <FileStack size={12} color={Colors.primary} />
+                <Text style={styles.pageCountText}>{document.page_count}</Text>
+              </View>
+            )}
+          </View>
         </View>
         <Text style={styles.date}>
           {formatDate(document.created_at)}
@@ -258,6 +267,19 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: Colors.primary,
+  },
+  badges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  receiptBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#34C759',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   date: {
     fontSize: 12,

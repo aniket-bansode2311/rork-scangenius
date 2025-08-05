@@ -11,11 +11,15 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { Share, Download, ArrowLeft, MoreVertical, FileText, RefreshCw, Copy, Cloud } from 'lucide-react-native';
+import { Share, Download, ArrowLeft, MoreVertical, FileText, RefreshCw, Copy, Cloud, Receipt } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { Container } from '@/components/Container';
 import { CloudExportDialog } from '@/components/CloudExportDialog';
+import ReceiptDataDialog from '@/components/ReceiptDataDialog';
+import ReceiptDataView from '@/components/ReceiptDataView';
 import { deleteDocument, getDocumentOCRText, reprocessDocumentOCR } from '@/lib/supabase';
+import { trpc } from '@/lib/trpc';
+import { ReceiptData } from '@/types/supabase';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -28,6 +32,8 @@ export default function DocumentDetailScreen() {
     created_at: string;
     ocr_text?: string;
     ocr_processed?: string;
+    receipt_data?: string;
+    receipt_processed?: string;
   }>();
   
   const [loading, setLoading] = useState<boolean>(false);
@@ -36,6 +42,10 @@ export default function DocumentDetailScreen() {
   const [ocrLoading, setOcrLoading] = useState<boolean>(false);
   const [showOcrText, setShowOcrText] = useState<boolean>(false);
   const [showCloudExport, setShowCloudExport] = useState<boolean>(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [showReceiptDialog, setShowReceiptDialog] = useState<boolean>(false);
+  const [showReceiptData, setShowReceiptData] = useState<boolean>(false);
+  const [receiptExtracting, setReceiptExtracting] = useState<boolean>(false);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -49,7 +59,25 @@ export default function DocumentDetailScreen() {
     });
   };
 
-  // Load OCR text on component mount
+  // tRPC mutations
+  const extractReceiptMutation = trpc.receipts.extract.useMutation({
+    onSuccess: (result) => {
+      setReceiptData(result.data);
+      setReceiptExtracting(false);
+      Alert.alert('Success', 'Receipt data extracted successfully!');
+    },
+    onError: (error) => {
+      setReceiptExtracting(false);
+      Alert.alert('Error', error.message);
+    },
+  });
+
+  const checkReceiptQuery = trpc.receipts.check.useQuery(
+    { ocrText: ocrText || '' },
+    { enabled: !!ocrText }
+  );
+
+  // Load OCR text and receipt data on component mount
   React.useEffect(() => {
     const loadOCRText = async () => {
       try {
@@ -66,7 +94,17 @@ export default function DocumentDetailScreen() {
     if (!ocrText && params.ocr_processed === 'true') {
       loadOCRText();
     }
-  }, [ocrText, params.id, params.ocr_processed]);
+
+    // Parse receipt data if available
+    if (params.receipt_data) {
+      try {
+        const parsedReceiptData = JSON.parse(params.receipt_data);
+        setReceiptData(parsedReceiptData);
+      } catch (error) {
+        console.error('Error parsing receipt data:', error);
+      }
+    }
+  }, [ocrText, params.id, params.ocr_processed, params.receipt_data]);
 
 
 
@@ -83,6 +121,23 @@ export default function DocumentDetailScreen() {
     } finally {
       setOcrLoading(false);
     }
+  };
+
+  const handleExtractReceiptData = async () => {
+    if (!ocrText) {
+      Alert.alert('Error', 'No OCR text available for receipt extraction');
+      return;
+    }
+
+    setReceiptExtracting(true);
+    extractReceiptMutation.mutate({
+      documentId: params.id,
+      ocrText,
+    });
+  };
+
+  const handleReceiptDataSave = (data: ReceiptData) => {
+    setReceiptData(data);
   };
 
   const handleCopyOCRText = () => {
@@ -182,6 +237,21 @@ export default function DocumentDetailScreen() {
         text: 'Reprocess OCR',
         onPress: handleReprocessOCR
       });
+      
+      // Add receipt extraction option if it looks like a receipt
+      if (checkReceiptQuery.data?.isLikelyReceipt && !receiptData) {
+        actions.push({
+          text: 'Extract Receipt Data',
+          onPress: handleExtractReceiptData
+        });
+      }
+      
+      if (receiptData) {
+        actions.push({
+          text: 'Edit Receipt Data',
+          onPress: () => setShowReceiptDialog(true)
+        });
+      }
     }
 
     actions.push(
@@ -261,6 +331,65 @@ export default function DocumentDetailScreen() {
             Created: {formatDate(params.created_at)}
           </Text>
           
+          {/* Receipt Data Section */}
+          {receiptData && (
+            <View style={styles.receiptContainer}>
+              <TouchableOpacity
+                style={styles.receiptHeader}
+                onPress={() => setShowReceiptData(!showReceiptData)}
+                testID="receipt-toggle-button"
+              >
+                <Receipt size={20} color={Colors.primary} />
+                <Text style={styles.receiptHeaderText}>Receipt Data</Text>
+                {receiptData.confidence_score && (
+                  <Text style={styles.confidenceText}>
+                    {receiptData.confidence_score}% confident
+                  </Text>
+                )}
+              </TouchableOpacity>
+              
+              {showReceiptData && (
+                <View style={styles.receiptDataContainer}>
+                  <ReceiptDataView
+                    receiptData={receiptData}
+                    onEdit={() => setShowReceiptDialog(true)}
+                    showEditButton={true}
+                  />
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Receipt Extraction Suggestion */}
+          {ocrText && checkReceiptQuery.data?.isLikelyReceipt && !receiptData && !receiptExtracting && (
+            <View style={styles.receiptSuggestionContainer}>
+              <TouchableOpacity
+                style={styles.receiptSuggestion}
+                onPress={handleExtractReceiptData}
+                testID="extract-receipt-button"
+              >
+                <Receipt size={20} color={Colors.primary} />
+                <View style={styles.receiptSuggestionText}>
+                  <Text style={styles.receiptSuggestionTitle}>
+                    This looks like a receipt
+                  </Text>
+                  <Text style={styles.receiptSuggestionSubtitle}>
+                    Tap to extract structured data
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {receiptExtracting && (
+            <View style={styles.receiptExtracting}>
+              <RefreshCw size={20} color={Colors.primary} />
+              <Text style={styles.receiptExtractingText}>
+                Extracting receipt data...
+              </Text>
+            </View>
+          )}
+
           {(ocrText || ocrLoading) && (
             <View style={styles.ocrContainer}>
               <TouchableOpacity
@@ -351,6 +480,14 @@ export default function DocumentDetailScreen() {
         onClose={() => setShowCloudExport(false)}
         documentTitle={params.title}
         documentUrl={params.file_url}
+      />
+      
+      <ReceiptDataDialog
+        visible={showReceiptDialog}
+        onClose={() => setShowReceiptDialog(false)}
+        documentId={params.id}
+        initialData={receiptData || undefined}
+        onSave={handleReceiptDataSave}
       />
     </Container>
   );
@@ -509,5 +646,77 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: Colors.primary,
+  },
+  receiptContainer: {
+    marginTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: Colors.gray[200],
+    paddingTop: 16,
+  },
+  receiptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  receiptHeaderText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.gray[900],
+    flex: 1,
+  },
+  confidenceText: {
+    fontSize: 12,
+    color: Colors.gray[500],
+    fontWeight: '500',
+  },
+  receiptDataContainer: {
+    marginTop: 12,
+    backgroundColor: Colors.gray[50],
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  receiptSuggestionContainer: {
+    marginTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: Colors.gray[200],
+    paddingTop: 16,
+  },
+  receiptSuggestion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    backgroundColor: Colors.primary + '10',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.primary + '30',
+  },
+  receiptSuggestionText: {
+    flex: 1,
+  },
+  receiptSuggestionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.gray[900],
+    marginBottom: 2,
+  },
+  receiptSuggestionSubtitle: {
+    fontSize: 14,
+    color: Colors.gray[600],
+  },
+  receiptExtracting: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 16,
+    backgroundColor: Colors.gray[50],
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  receiptExtractingText: {
+    fontSize: 16,
+    color: Colors.gray[700],
+    fontWeight: '500',
   },
 });
