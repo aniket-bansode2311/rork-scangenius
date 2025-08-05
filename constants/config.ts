@@ -2,8 +2,8 @@
 // Replace these with your actual Supabase project credentials
 // You can find these in your Supabase dashboard under Settings > API
 
-export const SUPABASE_URL = "https://your-project-id.supabase.co";
-export const SUPABASE_ANON_KEY = "your-anon-key-here";
+export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 // Google Cloud Vision API Configuration
 // Replace with your actual Google Cloud Vision API key
