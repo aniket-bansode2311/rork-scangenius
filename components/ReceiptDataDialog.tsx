@@ -51,7 +51,7 @@ export default function ReceiptDataDialog({
       onSave?.(receiptData);
       onClose();
     },
-    onError: (error) => {
+    onError: (error: { message: string }) => {
       Alert.alert('Error', error.message);
     },
   });
