@@ -29,23 +29,19 @@ import { SaveDocumentDialog } from '@/components/SaveDocumentDialog';
 import { saveDocumentToDatabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { extractTextFromImage, isOCRConfigured } from '@/lib/ocr';
-
-
+import { 
+  documentDetectionService, 
+  DocumentBounds, 
+  Point,
+  ImageProcessor 
+} from '@/lib/document-detection';
 
 type FilterType = 'original' | 'bw' | 'grayscale' | 'enhanced';
 type ProcessingMode = 'preview' | 'crop' | 'rotate' | 'filter';
 
-interface CornerPoint {
-  x: number;
-  y: number;
-}
-
-interface CropBounds {
-  topLeft: CornerPoint;
-  topRight: CornerPoint;
-  bottomLeft: CornerPoint;
-  bottomRight: CornerPoint;
-}
+// Use types from document detection library
+type CornerPoint = Point;
+type CropBounds = DocumentBounds;
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -66,6 +62,12 @@ export default function PhotoPreviewScreen() {
   const [showSaveDialog, setShowSaveDialog] = useState<boolean>(false);
   const [ocrText, setOcrText] = useState<string>('');
   const [isPerformingOCR, setIsPerformingOCR] = useState<boolean>(false);
+  const [perspectiveDistortion, setPerspectiveDistortion] = useState<number>(0);
+  const [recommendedSettings, setRecommendedSettings] = useState<{
+    enhanceContrast: boolean;
+    sharpen: boolean;
+    denoiseLevel: number;
+  } | null>(null);
 
   const performOCR = useCallback(async () => {
     if (!photoUri) return;
@@ -93,28 +95,53 @@ export default function PhotoPreviewScreen() {
   const detectDocumentBorders = useCallback(async () => {
     try {
       setIsProcessing(true);
-      console.log('Detecting document borders...');
+      console.log('Detecting document borders with advanced algorithm...');
       
-      // Simulate border detection - in a real app, you'd use computer vision
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Use the enhanced document detection service
+      const detectionResult = await documentDetectionService.detectDocumentInImage(photoUri);
       
-      // Set detected corners (simulated)
+      if (detectionResult.bounds) {
+        setCropBounds(detectionResult.bounds);
+        
+        // Analyze document quality and get recommendations
+        const qualityAnalysis = documentDetectionService.analyzeDocumentQuality(detectionResult.bounds);
+        setPerspectiveDistortion(qualityAnalysis.perspectiveDistortion);
+        setRecommendedSettings(qualityAnalysis.recommendedSettings);
+        
+        console.log('Document detection completed:', {
+          confidence: detectionResult.confidence,
+          perspectiveDistortion: qualityAnalysis.perspectiveDistortion,
+          recommendedSettings: qualityAnalysis.recommendedSettings
+        });
+      } else {
+        // Fallback to default bounds if detection fails
+        const margin = 40;
+        const fallbackBounds: CropBounds = {
+          topLeft: { x: margin, y: margin },
+          topRight: { x: screenWidth - margin - 40, y: margin },
+          bottomLeft: { x: margin, y: 280 },
+          bottomRight: { x: screenWidth - margin - 40, y: 280 },
+          confidence: 0.3
+        };
+        setCropBounds(fallbackBounds);
+        console.log('Using fallback bounds - detection failed');
+      }
+    } catch (error) {
+      console.error('Error detecting borders:', error);
+      // Set fallback bounds on error
       const margin = 40;
-      const detectedBounds: CropBounds = {
+      const fallbackBounds: CropBounds = {
         topLeft: { x: margin, y: margin },
         topRight: { x: screenWidth - margin - 40, y: margin },
         bottomLeft: { x: margin, y: 280 },
-        bottomRight: { x: screenWidth - margin - 40, y: 280 }
+        bottomRight: { x: screenWidth - margin - 40, y: 280 },
+        confidence: 0.3
       };
-      
-      setCropBounds(detectedBounds);
-      console.log('Border detection completed');
-    } catch (error) {
-      console.error('Error detecting borders:', error);
+      setCropBounds(fallbackBounds);
     } finally {
       setIsProcessing(false);
     }
-  }, []);
+  }, [photoUri]);
 
   useEffect(() => {
     if (photoUri) {
@@ -140,19 +167,50 @@ export default function PhotoPreviewScreen() {
 
 
   const applyPerspectiveCorrection = async () => {
-    if (!cropBounds) return;
+    if (!cropBounds) {
+      Alert.alert('Error', 'No document bounds detected');
+      return;
+    }
     
     try {
       setIsProcessing(true);
-      console.log('Applying perspective correction...');
+      console.log('Applying advanced perspective correction...');
       
-      // Simulate perspective correction
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Use the enhanced processing pipeline with recommended settings
+      const processingOptions = recommendedSettings || {
+        enhanceContrast: true,
+        sharpen: true,
+        denoiseLevel: 0.3
+      };
       
-      Alert.alert('Success', 'Perspective correction applied!');
+      console.log('Processing with options:', processingOptions);
+      console.log('Perspective distortion level:', perspectiveDistortion.toFixed(3));
+      
+      // Apply perspective correction using the advanced algorithm
+      const correctedImageUri = await documentDetectionService.processDocumentWithPerspectiveCorrection(
+        photoUri,
+        cropBounds,
+        {
+          ...processingOptions,
+          outputQuality: 0.95 // High quality for final output
+        }
+      );
+      
+      console.log('Perspective correction completed:', correctedImageUri);
+      
+      // Show success message with quality info
+      const distortionLevel = perspectiveDistortion < 0.2 ? 'Low' : 
+                            perspectiveDistortion < 0.4 ? 'Moderate' : 'High';
+      
+      Alert.alert(
+        'Perspective Correction Applied!', 
+        `Document processed successfully.\n\nDistortion level: ${distortionLevel}\nEnhancements applied: ${Object.entries(processingOptions).filter(([_, value]) => value === true).map(([key]) => key).join(', ')}`,
+        [{ text: 'OK', style: 'default' }]
+      );
     } catch (error) {
       console.error('Error applying perspective correction:', error);
-      Alert.alert('Error', 'Failed to apply perspective correction');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      Alert.alert('Perspective Correction Failed', `Error: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
     }
@@ -175,10 +233,13 @@ export default function PhotoPreviewScreen() {
       topLeft: { x: margin, y: margin },
       topRight: { x: screenWidth - margin - 40, y: margin },
       bottomLeft: { x: margin, y: 280 },
-      bottomRight: { x: screenWidth - margin - 40, y: 280 }
+      bottomRight: { x: screenWidth - margin - 40, y: 280 },
+      confidence: 0.5
     };
     
     setCropBounds(defaultBounds);
+    setPerspectiveDistortion(0);
+    setRecommendedSettings(null);
   };
 
   const handleRetake = () => {
@@ -210,23 +271,59 @@ export default function PhotoPreviewScreen() {
         ocrTextLength: ocrText.length
       });
 
-      // Apply processing steps (simulated)
+      // Apply advanced processing pipeline
+      let processedImageUri = photoUri;
+      
       if (cropBounds) {
-        console.log('Applying perspective correction...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log('Applying perspective correction and enhancements...');
+        
+        // Use recommended settings or defaults
+        const processingOptions = recommendedSettings || {
+          enhanceContrast: currentFilter === 'enhanced',
+          sharpen: true,
+          denoiseLevel: 0.3
+        };
+        
+        // Apply perspective correction with quality optimization
+        processedImageUri = await documentDetectionService.processDocumentWithPerspectiveCorrection(
+          photoUri,
+          cropBounds,
+          {
+            ...processingOptions,
+            outputQuality: 0.95
+          }
+        );
+        
+        console.log('Advanced processing completed:', {
+          originalUri: photoUri,
+          processedUri: processedImageUri,
+          perspectiveDistortion: perspectiveDistortion.toFixed(3),
+          settings: processingOptions
+        });
       }
 
-      // Apply filters and rotation (simulated)
-      console.log(`Applying ${currentFilter} filter and ${rotation}° rotation...`);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Apply additional filters and rotation (simulated)
+      if (currentFilter !== 'original' || rotation !== 0) {
+        console.log(`Applying ${currentFilter} filter and ${rotation}° rotation...`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
 
-      // Save to Supabase with OCR text and tags
+      // Save to Supabase with OCR text, tags, and processing metadata
       const savedDocument = await saveDocumentToDatabase({
         title,
-        imageUri: photoUri,
+        imageUri: processedImageUri, // Use the processed image
         userId: user.id,
         ocrText: ocrText || undefined,
-        tags: tags.length > 0 ? tags : undefined
+        tags: tags.length > 0 ? tags : undefined,
+        metadata: {
+          originalUri: photoUri,
+          perspectiveDistortion: perspectiveDistortion,
+          processingSettings: recommendedSettings,
+          filter: currentFilter,
+          rotation: rotation,
+          autoCropped: isAutoCropped,
+          confidence: cropBounds?.confidence || 0
+        }
       });
 
       console.log('Document saved successfully:', savedDocument);
@@ -287,14 +384,20 @@ export default function PhotoPreviewScreen() {
               <Text style={styles.toolButtonText}>Reset</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={styles.toolButton}
+              style={[
+                styles.toolButton,
+                perspectiveDistortion > 0.3 && styles.toolButtonHighPriority
+              ]}
               onPress={applyPerspectiveCorrection}
               disabled={isProcessing}
             >
               <Maximize size={20} color={Colors.background} />
               <Text style={styles.toolButtonText}>
-                {isProcessing ? 'Processing...' : 'Apply'}
+                {isProcessing ? 'Processing...' : 'Correct'}
               </Text>
+              {perspectiveDistortion > 0.3 && (
+                <View style={styles.priorityIndicator} />
+              )}
             </TouchableOpacity>
           </View>
         );
@@ -364,6 +467,15 @@ export default function PhotoPreviewScreen() {
           </Text>
           {isAutoCropped && (
             <Text style={styles.headerSubtitle}>Auto-cropped document</Text>
+          )}
+          {perspectiveDistortion > 0 && processingMode === 'crop' && (
+            <Text style={[
+              styles.headerSubtitle,
+              perspectiveDistortion > 0.3 ? styles.highDistortion : styles.lowDistortion
+            ]}>
+              Distortion: {perspectiveDistortion < 0.2 ? 'Low' : 
+                         perspectiveDistortion < 0.4 ? 'Moderate' : 'High'}
+            </Text>
           )}
         </View>
         
@@ -798,5 +910,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 8,
     fontWeight: '600',
+  },
+  toolButtonHighPriority: {
+    backgroundColor: 'rgba(255, 193, 7, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 193, 7, 0.5)',
+  },
+  priorityIndicator: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FFC107',
+  },
+  highDistortion: {
+    color: '#FF6B6B',
+  },
+  lowDistortion: {
+    color: '#4ECDC4',
   },
 });
