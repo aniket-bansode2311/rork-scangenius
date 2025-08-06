@@ -25,6 +25,8 @@ export interface DocumentUploadResult {
   thumbnailName: string;
 }
 
+
+
 export interface SaveDocumentParams {
   title: string;
   imageUri: string;
@@ -53,225 +55,63 @@ export const generateThumbnail = async (imageUri: string): Promise<string> => {
   }
 };
 
-// Primary upload method - works for most cases
+// Upload image to Supabase Storage
 export const uploadImageToStorage = async (
   imageUri: string,
   fileName: string,
   bucket: string = 'scans'
 ): Promise<string> => {
   try {
-    console.log('Uploading image to storage (primary method):', { imageUri, fileName, bucket });
+    console.log('Uploading image to storage:', { imageUri, fileName, bucket });
+    
+    let fileData: any;
     
     if (Platform.OS === 'web') {
-      // Web platform handling
+      // For web, convert data URL to blob
       const response = await fetch(imageUri);
-      const blob = await response.blob();
-      
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, blob, {
-          contentType: 'image/jpeg',
-          upsert: false
-        });
-      
-      if (error) {
-        console.error('Storage upload error (web):', error);
-        throw error;
-      }
-      
-      const { data: urlData } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(fileName);
-      
-      console.log('Image uploaded successfully (web):', urlData.publicUrl);
-      return urlData.publicUrl;
+      fileData = await response.blob();
     } else {
-      // React Native platform handling
-      console.log('Uploading from React Native platform');
-      
-      // Check if file exists
-      const fileInfo = await FileSystem.getInfoAsync(imageUri);
-      console.log('File info:', fileInfo);
-      
-      if (!fileInfo.exists) {
-        throw new Error('File does not exist at URI: ' + imageUri);
-      }
-      
-      // Try using the file URI directly with proper format
-      const fileObject = {
-        uri: imageUri,
-        type: 'image/jpeg',
-        name: fileName,
-      } as any;
-      
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, fileObject, {
-          contentType: 'image/jpeg',
-          upsert: false
-        });
-      
-      if (error) {
-        console.error('File object upload failed:', error);
-        throw error;
-      }
-      
-      const { data: urlData } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(fileName);
-      
-      console.log('File object upload successful:', urlData.publicUrl);
-      return urlData.publicUrl;
-    }
-  } catch (error) {
-    console.error('Error in primary upload method:', error);
-    throw error;
-  }
-};
-
-// Alternative upload method using base64
-export const uploadImageToStorageBase64 = async (
-  imageUri: string,
-  fileName: string,
-  bucket: string = 'scans'
-): Promise<string> => {
-  try {
-    console.log('Using base64 upload method');
-    
-    if (Platform.OS === 'web') {
-      // Web platform
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-      
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, blob, {
-          contentType: 'image/jpeg',
-          upsert: false
-        });
-      
-      if (error) throw error;
-      
-      const { data: urlData } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(fileName);
-      
-      return urlData.publicUrl;
-    } else {
-      // React Native platform
+      // For mobile, read file as base64
       const base64 = await FileSystem.readAsStringAsync(imageUri, {
         encoding: FileSystem.EncodingType.Base64,
       });
       
-      console.log('Base64 length:', base64.length);
-      
-      // Convert base64 to Uint8Array
-      const binaryString = atob(base64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+      // Convert base64 to blob-like object
+      const byteCharacters = atob(base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
       }
-      
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, bytes, {
-          contentType: 'image/jpeg',
-          upsert: false
-        });
-      
-      if (error) {
-        console.error('Base64 upload failed:', error);
-        throw error;
-      }
-      
-      const { data: urlData } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(fileName);
-      
-      console.log('Base64 upload successful:', urlData.publicUrl);
-      return urlData.publicUrl;
+      const byteArray = new Uint8Array(byteNumbers);
+      fileData = new Blob([byteArray], { type: 'image/jpeg' });
     }
-  } catch (error) {
-    console.error('Base64 upload method failed:', error);
-    throw error;
-  }
-};
-
-// FormData upload method using direct API calls
-export const uploadImageToStorageFormData = async (
-  imageUri: string,
-  fileName: string,
-  bucket: string = 'scans'
-): Promise<string> => {
-  try {
-    console.log('Using FormData upload method');
     
-    if (Platform.OS === 'web') {
-      // Web platform
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-      
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, blob, {
-          contentType: 'image/jpeg',
-          upsert: false
-        });
-      
-      if (error) throw error;
-      
-      const { data: urlData } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(fileName);
-      
-      return urlData.publicUrl;
-    } else {
-      // React Native platform using direct API
-      const formData = new FormData();
-      
-      // Add the file to FormData
-      formData.append('file', {
-        uri: imageUri,
-        type: 'image/jpeg',
-        name: fileName,
-      } as any);
-      
-      // Get session token
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || SUPABASE_ANON_KEY;
-      
-      const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${bucket}/${fileName}`;
-      
-      const response = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(fileName, fileData, {
+        contentType: 'image/jpeg',
+        upsert: false
       });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('FormData upload failed:', response.status, errorText);
-        throw new Error(`Upload failed: ${response.status} ${errorText}`);
-      }
-      
-      console.log('FormData upload successful');
-      
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(fileName);
-      
-      return urlData.publicUrl;
+    
+    if (error) {
+      console.error('Storage upload error:', error);
+      throw error;
     }
+    
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(fileName);
+    
+    console.log('Image uploaded successfully:', urlData.publicUrl);
+    return urlData.publicUrl;
   } catch (error) {
-    console.error('FormData upload failed:', error);
+    console.error('Error uploading image:', error);
     throw error;
   }
 };
 
-// Save document to database with OCR processing - Updated with multiple upload methods
+// Save document to database with OCR processing
 export const saveDocumentToDatabase = async (params: SaveDocumentParams): Promise<Document> => {
   try {
     console.log('Saving document to database:', params);
@@ -283,51 +123,11 @@ export const saveDocumentToDatabase = async (params: SaveDocumentParams): Promis
     // Generate thumbnail
     const thumbnailUri = await generateThumbnail(params.imageUri);
     
-    // Try multiple upload methods in order of preference
-    let fileUrl: string;
-    let thumbnailUrl: string;
-    
-    const uploadMethods = [
-      {
-        name: 'Primary Upload (File Object)',
-        method: uploadImageToStorage
-      },
-      {
-        name: 'Base64 Upload',
-        method: uploadImageToStorageBase64
-      },
-      {
-        name: 'FormData Upload',
-        method: uploadImageToStorageFormData
-      }
-    ];
-    
-    let uploadSuccess = false;
-    let lastError: Error | null = null;
-    
-    for (const uploadMethod of uploadMethods) {
-      try {
-        console.log(`Trying ${uploadMethod.name}...`);
-        
-        [fileUrl, thumbnailUrl] = await Promise.all([
-          uploadMethod.method(params.imageUri, fileName),
-          uploadMethod.method(thumbnailUri, thumbnailName)
-        ]);
-        
-        console.log(`${uploadMethod.name} successful!`);
-        uploadSuccess = true;
-        break;
-      } catch (uploadError) {
-        console.log(`${uploadMethod.name} failed:`, uploadError);
-        lastError = uploadError as Error;
-        continue;
-      }
-    }
-    
-    if (!uploadSuccess) {
-      console.error('All upload methods failed. Last error:', lastError);
-      throw new Error(`Failed to upload images after trying all methods. Last error: ${lastError?.message}`);
-    }
+    // Upload both images to storage
+    const [fileUrl, thumbnailUrl] = await Promise.all([
+      uploadImageToStorage(params.imageUri, fileName),
+      uploadImageToStorage(thumbnailUri, thumbnailName)
+    ]);
     
     // Save document metadata to database
     const { data, error } = await supabase
@@ -335,8 +135,8 @@ export const saveDocumentToDatabase = async (params: SaveDocumentParams): Promis
       .insert({
         user_id: params.userId,
         title: params.title,
-        file_url: fileUrl!,
-        thumbnail_url: thumbnailUrl!,
+        file_url: fileUrl,
+        thumbnail_url: thumbnailUrl,
         ocr_text: params.ocrText || null,
         ocr_processed: !!params.ocrText,
         tags: params.tags || [],
@@ -367,73 +167,6 @@ export const saveDocumentToDatabase = async (params: SaveDocumentParams): Promis
     return data as Document;
   } catch (error) {
     console.error('Error saving document:', error);
-    throw error;
-  }
-};
-
-// Test function to verify Supabase storage setup
-export const testSupabaseStorage = async (): Promise<void> => {
-  try {
-    console.log('Testing Supabase storage setup...');
-    
-    // Test 1: Check if bucket exists and is accessible
-    const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
-    
-    if (bucketError) {
-      console.error('Error listing buckets:', bucketError);
-      throw new Error('Cannot access Supabase storage buckets');
-    }
-    
-    console.log('Available buckets:', buckets.map(b => b.name));
-    
-    const scansBucket = buckets.find(b => b.name === 'scans');
-    if (!scansBucket) {
-      console.error('Scans bucket not found. Available buckets:', buckets.map(b => b.name));
-      throw new Error('Scans bucket does not exist. Please create it in your Supabase dashboard.');
-    }
-    
-    console.log('✓ Scans bucket found');
-    
-    // Test 2: Try to upload a small test file
-    const testFileName = `test_${Date.now()}.txt`;
-    const testContent = 'This is a test file';
-    
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('scans')
-      .upload(testFileName, testContent, {
-        contentType: 'text/plain',
-        upsert: false
-      });
-    
-    if (uploadError) {
-      console.error('Test upload failed:', uploadError);
-      throw new Error(`Test upload failed: ${uploadError.message}`);
-    }
-    
-    console.log('✓ Test upload successful');
-    
-    // Test 3: Try to get public URL
-    const { data: urlData } = supabase.storage
-      .from('scans')
-      .getPublicUrl(testFileName);
-    
-    console.log('✓ Public URL generated:', urlData.publicUrl);
-    
-    // Test 4: Clean up test file
-    const { error: deleteError } = await supabase.storage
-      .from('scans')
-      .remove([testFileName]);
-    
-    if (deleteError) {
-      console.warn('Warning: Could not delete test file:', deleteError);
-    } else {
-      console.log('✓ Test file cleaned up');
-    }
-    
-    console.log('🎉 Supabase storage test completed successfully!');
-    
-  } catch (error) {
-    console.error('Supabase storage test failed:', error);
     throw error;
   }
 };

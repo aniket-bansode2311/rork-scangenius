@@ -136,12 +136,3 @@ GRANT SELECT ON public.profiles TO anon;
 GRANT ALL ON public.documents TO authenticated;
 
 
-
-
--- Allow authenticated users to upload files
-CREATE POLICY "Users can upload files" ON storage.objects
-FOR INSERT WITH CHECK (auth.role() = 'authenticated');
-
--- Allow public access to view files
-CREATE POLICY "Public can view files" ON storage.objects
-FOR SELECT USING (bucket_id = 'scans');

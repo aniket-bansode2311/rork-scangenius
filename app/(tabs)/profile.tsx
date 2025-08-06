@@ -1,15 +1,13 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, Alert, TouchableOpacity, Modal } from 'react-native';
+import React from 'react';
+import { StyleSheet, Text, View, Alert } from 'react-native';
 import { Container } from '@/components/Container';
 import { Button } from '@/components/Button';
-import { TestRunner } from '@/components/TestRunner';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/colors';
-import { User, Settings, TestTube } from 'lucide-react-native';
+import { User, Settings } from 'lucide-react-native';
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
-  const [showTestRunner, setShowTestRunner] = useState<boolean>(false);
 
   const handleSignOut = async () => {
     Alert.alert(
@@ -62,19 +60,6 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Developer Tools</Text>
-          
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={() => setShowTestRunner(true)}
-            testID="test-runner-button"
-          >
-            <TestTube size={20} color={Colors.primary} />
-            <Text style={[styles.menuText, { color: Colors.primary }]}>Test Runner</Text>
-          </TouchableOpacity>
-        </View>
-
         <View style={styles.footer}>
           <Button
             title="Sign Out"
@@ -85,15 +70,6 @@ export default function ProfileScreen() {
             testID="signout-button"
           />
         </View>
-        
-        {/* Test Runner Modal */}
-        <Modal
-          visible={showTestRunner}
-          animationType="slide"
-          presentationStyle="pageSheet"
-        >
-          <TestRunner onClose={() => setShowTestRunner(false)} />
-        </Modal>
       </View>
     </Container>
   );

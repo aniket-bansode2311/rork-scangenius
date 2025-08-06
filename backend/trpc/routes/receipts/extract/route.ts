@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { protectedProcedure } from '../../../create-context';
+import { procedure } from '../../../create-context'; // Changed from protectedProcedure
 
 // Define the context type (adjust based on your actual context structure)
 interface TRPCContext {
@@ -9,7 +9,7 @@ interface TRPCContext {
   supabase: any; // Type this properly based on your Supabase client
 }
 
-export const extractReceiptProcedure = protectedProcedure
+export const extractReceiptProcedure = procedure
   .input(z.object({
     documentId: z.string().uuid(),
     ocrText: z.string().min(1)

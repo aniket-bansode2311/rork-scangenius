@@ -1,19 +1,17 @@
-import { router } from './create-context';
-import { checkReceiptProcedure } from './routes/receipts/check/route';
-import { extractReceiptProcedure } from './routes/receipts/extract/route';
-import { updateReceiptProcedure } from './routes/receipts/update/route';
+import { createTRPCRouter } from "./create-context";
+import hiRoute from "./routes/example/hi/route";
+import { extractReceiptProcedure } from "./routes/receipts/extract/route";
+import { updateReceiptProcedure } from "./routes/receipts/update/route";
+import { checkReceiptProcedure } from "./routes/receipts/check/route";
 
-// Import example route
-import exampleHiRoute from './routes/example/hi/route';
-
-export const appRouter = router({
-  example: router({
-    hi: exampleHiRoute,
+export const appRouter = createTRPCRouter({
+  example: createTRPCRouter({
+    hi: hiRoute,
   }),
-  receipts: router({
-    check: checkReceiptProcedure,
+  receipts: createTRPCRouter({
     extract: extractReceiptProcedure,
     update: updateReceiptProcedure,
+    check: checkReceiptProcedure,
   }),
 });
 
