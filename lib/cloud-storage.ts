@@ -34,21 +34,21 @@ export type ExportStatus = {
 const CLOUD_CONFIGS: Record<CloudProvider, CloudStorageConfig> = {
   'google-drive': {
     clientId: CLOUD_STORAGE_CONFIG.GOOGLE_DRIVE.CLIENT_ID,
-    redirectUri: AuthSession.makeRedirectUri({ useProxy: true }),
+    redirectUri: AuthSession.makeRedirectUri(),
     scopes: ['https://www.googleapis.com/auth/drive.file'],
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenUrl: 'https://oauth2.googleapis.com/token',
   },
   'dropbox': {
     clientId: CLOUD_STORAGE_CONFIG.DROPBOX.APP_KEY,
-    redirectUri: AuthSession.makeRedirectUri({ useProxy: true }),
+    redirectUri: AuthSession.makeRedirectUri(),
     scopes: ['files.content.write'],
     authUrl: 'https://www.dropbox.com/oauth2/authorize',
     tokenUrl: 'https://api.dropboxapi.com/oauth2/token',
   },
   'onedrive': {
     clientId: CLOUD_STORAGE_CONFIG.ONEDRIVE.CLIENT_ID,
-    redirectUri: AuthSession.makeRedirectUri({ useProxy: true }),
+    redirectUri: AuthSession.makeRedirectUri(),
     scopes: ['Files.ReadWrite'],
     authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
     tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
@@ -111,13 +111,13 @@ class CloudStorageService {
       const codeVerifier = await Crypto.digestStringAsync(
         Crypto.CryptoDigestAlgorithm.SHA256,
         Crypto.getRandomBytes(32).toString(),
-        { encoding: Crypto.CryptoEncoding.BASE64URL }
+        { encoding: Crypto.CryptoEncoding.BASE64 }
       );
 
       const codeChallenge = await Crypto.digestStringAsync(
         Crypto.CryptoDigestAlgorithm.SHA256,
         codeVerifier,
-        { encoding: Crypto.CryptoEncoding.BASE64URL }
+        { encoding: Crypto.CryptoEncoding.BASE64 }
       );
 
       // Build auth request
@@ -139,22 +139,30 @@ class CloudStorageService {
 
       const authRequest = new AuthSession.AuthRequest(authRequestConfig);
       
-      const authUrl = authRequest.makeAuthUrl({
-        authorizationEndpoint: config.authUrl,
-      });
+      const authUrl = config.authUrl + '?' + new URLSearchParams({
+        client_id: config.clientId,
+        redirect_uri: config.redirectUri,
+        response_type: 'code',
+        scope: config.scopes.join(' '),
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+        ...(provider === 'dropbox' ? { token_access_type: 'offline' } : {})
+      }).toString();
 
       console.log('Opening auth URL:', authUrl);
       
-      const result = await AuthSession.startAsync({
+      const result = await WebBrowser.openAuthSessionAsync(
         authUrl,
-        returnUrl: config.redirectUri,
-      });
+        config.redirectUri
+      );
 
       if (result.type !== 'success') {
         throw new Error('Authentication was cancelled or failed');
       }
 
-      const { code } = result.params;
+      // Parse the URL parameters from the redirect URL
+      const url = new URL(result.url);
+      const code = url.searchParams.get('code');
       if (!code) {
         throw new Error('No authorization code received');
       }
@@ -168,7 +176,7 @@ class CloudStorageService {
       return token;
     } catch (error) {
       console.error('Authentication error:', error);
-      throw new Error(`Failed to authenticate with ${provider}: ${error.message}`);
+      throw new Error(`Failed to authenticate with ${provider}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -259,7 +267,7 @@ class CloudStorageService {
       }
     } catch (error) {
       console.error('Upload error:', error);
-      throw new Error(`Failed to upload to ${provider}: ${error.message}`);
+      throw new Error(`Failed to upload to ${provider}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
