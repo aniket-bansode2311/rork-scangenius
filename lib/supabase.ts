@@ -37,6 +37,7 @@ export interface SaveDocumentParams {
     originalUri?: string;
     perspectiveDistortion?: number;
     processingSettings?: any;
+    imageAnalysis?: any;
     filter?: string;
     rotation?: number;
     autoCropped?: boolean;
