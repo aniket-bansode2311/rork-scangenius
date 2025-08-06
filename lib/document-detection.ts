@@ -461,7 +461,7 @@ export class RealTimeDetector {
         // Only log non-camera errors
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (!errorMessage?.includes('unmounted') && !errorMessage?.includes('Camera')) {
-          console.error('Real-time detection error:', error);
+          console.error('Real-time detection error:', errorMessage);
         }
         
         // Stop detection if too many consecutive errors

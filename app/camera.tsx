@@ -79,17 +79,12 @@ export default function CameraScreen() {
   const captureFrame = useCallback(async (): Promise<string | null> => {
     // Check if camera is still mounted and available
     if (!cameraRef.current || isProcessing) {
-      console.log('Camera not available for frame capture');
       return null;
     }
     
     try {
-      // Add a small delay to ensure camera is ready
-      await new Promise(resolve => setTimeout(resolve, 50));
-      
-      // Check again after delay
+      // Quick check - don't add delays for real-time detection
       if (!cameraRef.current) {
-        console.log('Camera unmounted during frame capture');
         return null;
       }
       
@@ -101,13 +96,7 @@ export default function CameraScreen() {
       });
       return photo?.uri || null;
     } catch (error) {
-      // Don't log errors for unmounted camera - this is expected
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage?.includes('unmounted') || errorMessage?.includes('Camera')) {
-        console.log('Camera unavailable for frame capture (expected during navigation)');
-      } else {
-        console.error('Error capturing frame:', error);
-      }
+      // Silently handle camera unmounting - this is expected during navigation
       return null;
     }
   }, [isProcessing]);
@@ -170,7 +159,10 @@ export default function CameraScreen() {
   };
   
   const takePicture = async () => {
-    if (!cameraRef.current || isProcessing) return;
+    if (!cameraRef.current || isProcessing) {
+      console.log('Camera not available or already processing');
+      return;
+    }
 
     try {
       setIsProcessing(true);
@@ -181,10 +173,12 @@ export default function CameraScreen() {
       console.log('Taking picture...');
       
       // Add small delay to ensure camera is ready
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 100));
       
+      // Double-check camera is still available
       if (!cameraRef.current) {
-        console.log('Camera unmounted during photo capture');
+        console.log('Camera unmounted during photo capture preparation');
+        setIsProcessing(false);
         return;
       }
       
@@ -194,8 +188,8 @@ export default function CameraScreen() {
         skipProcessing: false,
       });
       
-      if (photo) {
-        console.log('Photo taken:', photo.uri);
+      if (photo && photo.uri) {
+        console.log('Photo taken successfully:', photo.uri);
         
         // If we have detected bounds, crop the image automatically
         if (detectedBounds && isDocumentDetected && detectionConfidence > 0.6) {
@@ -227,29 +221,41 @@ export default function CameraScreen() {
             params: { photoUri: photo.uri }
           });
         }
+      } else {
+        console.log('Photo capture returned null or invalid result');
+        Alert.alert('Error', 'Failed to capture photo. Please try again.');
       }
     } catch (error) {
-      console.error('Error taking picture:', error);
-      Alert.alert('Error', 'Failed to take picture. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Handle camera unmounting gracefully
+      if (errorMessage.includes('unmounted') || errorMessage.includes('Camera')) {
+        console.log('Camera was unmounted during photo capture (expected during navigation)');
+      } else {
+        console.error('Error taking picture:', error);
+        Alert.alert('Error', 'Failed to take picture. Please try again.');
+      }
     } finally {
       setIsProcessing(false);
       
-      // Restart real-time detection if still enabled and on screen
-      if (autoDetectionEnabled && permission?.granted) {
+      // Only restart detection if we're still on the camera screen
+      if (autoDetectionEnabled && permission?.granted && cameraRef.current) {
         setTimeout(() => {
-          realTimeDetector.startRealTimeDetection(handleDetectionResult, captureFrame);
+          if (cameraRef.current) { // Check again before restarting
+            realTimeDetector.startRealTimeDetection(handleDetectionResult, captureFrame);
+          }
         }, 500);
       }
     }
   };
 
   const handleClose = () => {
-    // Stop detection before navigating
+    // Stop detection immediately
     realTimeDetector.stopRealTimeDetection();
-    // Add small delay to ensure cleanup
-    setTimeout(() => {
-      router.back();
-    }, 100);
+    setIsProcessing(true); // Prevent any new operations
+    
+    // Navigate immediately - no need for delay
+    router.back();
   };
   
   const toggleAutoDetection = () => {
