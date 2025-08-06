@@ -60,7 +60,7 @@ export function BackendConnectivityTest() {
     try {
       // Test TRPC Connection
       await runTest('TRPC Connection', async () => {
-        const response = await trpcClient.example.hi.query();
+        const response = await trpcClient.example.hi.mutate({ name: 'test' });
         if (!response) {
           throw new Error('No response from TRPC server');
         }
@@ -97,11 +97,17 @@ export function BackendConnectivityTest() {
 
       // Test Receipt Processing
       await runTest('Receipt Processing', async () => {
-        const result = await trpcClient.receipts.extract.mutate({
-          ocrText: 'Test receipt text',
-          documentId: 'test-doc-123'
-        });
-        console.log('Receipt processing endpoint available:', result);
+        try {
+          await trpcClient.receipts.check.query({
+            ocrText: 'Test receipt total $12.34 tax $1.00'
+          });
+        } catch (error) {
+          // If it's an auth error, that means the endpoint is working
+          if (error instanceof Error && error.message.includes('UNAUTHORIZED')) {
+            return; // Endpoint is available but requires auth
+          }
+          throw error;
+        }
       });
 
       // Test AI Organization
