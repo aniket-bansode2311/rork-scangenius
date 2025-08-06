@@ -30,6 +30,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useDocumentEditing } from '@/context/DocumentEditingContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
+import { trpc } from '@/lib/trpc';
 
 
 
@@ -56,6 +57,31 @@ export default function ScansScreen() {
   const [showReorderDialog, setShowReorderDialog] = useState<boolean>(false);
   const [reorderDocument, setReorderDocument] = useState<Document | null>(null);
   const [reorderPages, setReorderPages] = useState<Document[]>([]);
+  
+  // tRPC mutations for OCR processing
+  const processOCRMutation = trpc.ocr.process.useMutation({
+    onSuccess: (data) => {
+      console.log('OCR processing completed:', data);
+      // Refetch documents to show updated OCR status
+      loadDocuments();
+    },
+    onError: (error) => {
+      console.error('OCR processing failed:', error);
+      Alert.alert('OCR Processing Failed', 'Failed to extract text from document.');
+    }
+  });
+  
+  const reprocessOCRMutation = trpc.ocr.reprocess.useMutation({
+    onSuccess: (data) => {
+      console.log('OCR reprocessing completed:', data);
+      loadDocuments();
+      Alert.alert('Success', 'Text extraction completed successfully.');
+    },
+    onError: (error) => {
+      console.error('OCR reprocessing failed:', error);
+      Alert.alert('OCR Processing Failed', 'Failed to reprocess text extraction.');
+    }
+  });
 
   const loadDocuments = useCallback(async (showRefreshing = false) => {
     if (!user) {

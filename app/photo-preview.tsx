@@ -29,6 +29,7 @@ import { SaveDocumentDialog } from '@/components/SaveDocumentDialog';
 import { saveDocumentToDatabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { extractTextFromImage, isOCRConfigured } from '@/lib/ocr';
+import { trpc } from '@/lib/trpc';
 import { 
   documentDetectionService, 
   DocumentBounds, 
@@ -67,6 +68,28 @@ export default function PhotoPreviewScreen() {
   const [showSaveDialog, setShowSaveDialog] = useState<boolean>(false);
   const [ocrText, setOcrText] = useState<string>('');
   const [isPerformingOCR, setIsPerformingOCR] = useState<boolean>(false);
+  const [isProcessingOCR, setIsProcessingOCR] = useState<boolean>(false);
+  
+  // tRPC mutations for OCR processing
+  const processOCRMutation = trpc.ocr.process.useMutation({
+    onSuccess: (data) => {
+      console.log('OCR processing completed:', data);
+      if (data.text && data.text.length > 0) {
+        setOcrText(data.text);
+      }
+    },
+    onError: (error) => {
+      console.error('OCR processing failed:', error);
+      Alert.alert(
+        'OCR Processing Failed',
+        'Text extraction failed, but your document was saved successfully. You can try reprocessing later.',
+        [{ text: 'OK' }]
+      );
+    },
+    onSettled: () => {
+      setIsProcessingOCR(false);
+    }
+  });
   const [perspectiveDistortion, setPerspectiveDistortion] = useState<number>(0);
   const [recommendedSettings, setRecommendedSettings] = useState<{
     enhanceContrast: boolean;
@@ -374,9 +397,23 @@ export default function PhotoPreviewScreen() {
 
       console.log('Document saved successfully:', savedDocument);
       
+      // Trigger OCR processing if no OCR text was provided
+      if (!ocrText || ocrText.trim().length === 0) {
+        console.log('Starting OCR processing for saved document...');
+        setIsProcessingOCR(true);
+        
+        processOCRMutation.mutate({
+          documentId: savedDocument.id,
+          imageUri: processedImageUri,
+          forceReprocess: false
+        });
+      }
+      
       Alert.alert(
         'Success!',
-        'Your document has been processed and saved successfully.',
+        ocrText ? 
+          'Your document has been processed and saved successfully.' :
+          'Your document has been saved successfully. Text extraction is processing in the background.',
         [
           {
             text: 'View Documents',
@@ -1033,7 +1070,7 @@ onLoad={() => {
         <TouchableOpacity 
           style={styles.saveButton}
           onPress={handleSave}
-          disabled={isProcessing}
+          disabled={isProcessing || isProcessingOCR}
           testID="save-button"
         >
           <View style={[
@@ -1043,7 +1080,7 @@ onLoad={() => {
             <Check size={28} color={Colors.background} />
           </View>
           <Text style={styles.saveButtonText}>
-            {isProcessing ? 'Processing...' : 'Save'}
+            {isProcessing ? 'Processing...' : isProcessingOCR ? 'Processing OCR...' : 'Save'}
           </Text>
         </TouchableOpacity>
         
