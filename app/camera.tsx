@@ -102,7 +102,8 @@ export default function CameraScreen() {
       return photo?.uri || null;
     } catch (error) {
       // Don't log errors for unmounted camera - this is expected
-      if (error.message?.includes('unmounted') || error.message?.includes('Camera')) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage?.includes('unmounted') || errorMessage?.includes('Camera')) {
         console.log('Camera unavailable for frame capture (expected during navigation)');
       } else {
         console.error('Error capturing frame:', error);

@@ -410,7 +410,7 @@ export const documentDetectionService = {
 // Real-time detection utilities
 export class RealTimeDetector {
   private isDetecting = false;
-  private detectionInterval: NodeJS.Timeout | null = null;
+  private detectionInterval: number | null = null;
   private lastDetectionTime = 0;
   private readonly DETECTION_THROTTLE = 1000; // Increased to 1000ms to reduce camera stress
   private consecutiveErrors = 0;
@@ -459,7 +459,8 @@ export class RealTimeDetector {
         this.consecutiveErrors++;
         
         // Only log non-camera errors
-        if (!error.message?.includes('unmounted') && !error.message?.includes('Camera')) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (!errorMessage?.includes('unmounted') && !errorMessage?.includes('Camera')) {
           console.error('Real-time detection error:', error);
         }
         
