@@ -50,8 +50,13 @@ interface CropBounds {
 const { width: screenWidth } = Dimensions.get('window');
 
 export default function PhotoPreviewScreen() {
-  const { photoUri } = useLocalSearchParams<{ photoUri: string }>();
+  const { photoUri, originalUri, autoCropped } = useLocalSearchParams<{ 
+    photoUri: string;
+    originalUri?: string;
+    autoCropped?: string;
+  }>();
   const { user } = useAuth();
+  const isAutoCropped = autoCropped === 'true';
 
   const [processingMode, setProcessingMode] = useState<ProcessingMode>('preview');
   const [currentFilter, setCurrentFilter] = useState<FilterType>('original');
@@ -351,11 +356,16 @@ export default function PhotoPreviewScreen() {
           <X size={24} color={Colors.background} />
         </TouchableOpacity>
         
-        <Text style={styles.headerTitle}>
-          {processingMode === 'preview' ? 'Preview' : 
-           processingMode === 'crop' ? 'Crop & Correct' :
-           processingMode === 'rotate' ? 'Rotate' : 'Filters'}
-        </Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>
+            {processingMode === 'preview' ? 'Preview' : 
+             processingMode === 'crop' ? 'Crop & Correct' :
+             processingMode === 'rotate' ? 'Rotate' : 'Filters'}
+          </Text>
+          {isAutoCropped && (
+            <Text style={styles.headerSubtitle}>Auto-cropped document</Text>
+          )}
+        </View>
         
         <View style={styles.headerActions}>
           <TouchableOpacity 
@@ -576,10 +586,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerTitleContainer: {
+    alignItems: 'center',
+    flex: 1,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: Colors.background,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.success,
+    marginTop: 2,
   },
   headerActions: {
     flexDirection: 'row',
