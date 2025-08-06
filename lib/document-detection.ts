@@ -810,7 +810,7 @@ export const documentDetectionService = {
 // Real-time detection utilities
 export class RealTimeDetector {
   private isDetecting = false;
-  private detectionInterval: NodeJS.Timeout | null = null;
+  private detectionInterval: number | null = null;
   private lastDetectionTime = 0;
   private readonly DETECTION_THROTTLE = 1000; // Increased to 1000ms to reduce camera stress
   private consecutiveErrors = 0;

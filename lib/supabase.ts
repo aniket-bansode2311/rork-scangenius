@@ -33,6 +33,15 @@ export interface SaveDocumentParams {
   userId: string;
   ocrText?: string;
   tags?: string[];
+  metadata?: {
+    originalUri?: string;
+    perspectiveDistortion?: number;
+    processingSettings?: any;
+    filter?: string;
+    rotation?: number;
+    autoCropped?: boolean;
+    confidence?: number;
+  };
 }
 
 // Generate thumbnail from image
