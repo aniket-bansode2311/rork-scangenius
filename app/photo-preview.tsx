@@ -361,12 +361,7 @@ export default function PhotoPreviewScreen() {
           processedUri: processedImageUri,
           perspectiveDistortion: perspectiveDistortion.toFixed(3),
           settings: processingOptions,
-          imageAnalysis: result.analysis ? {
-            brightness: result.analysis.brightness.toFixed(1),
-            contrast: result.analysis.contrast.toFixed(2),
-            hasGlare: result.analysis.hasGlare,
-            hasShadows: result.analysis.hasShadows
-          } : null
+          // imageAnalysis removed as it's not part of SaveDocumentParams metadata type
         });
       }
 
@@ -387,7 +382,7 @@ export default function PhotoPreviewScreen() {
           originalUri: photoUri,
           perspectiveDistortion: perspectiveDistortion,
           processingSettings: recommendedSettings,
-          imageAnalysis: imageAnalysis,
+          // imageAnalysis removed as it's not part of SaveDocumentParams metadata type
           filter: currentFilter,
           rotation: rotation,
           autoCropped: isAutoCropped,

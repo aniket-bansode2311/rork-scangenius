@@ -232,7 +232,7 @@ export default function CameraScreen() {
       if (errorMessage.includes('unmounted') || errorMessage.includes('Camera')) {
         console.log('Camera was unmounted during photo capture (expected during navigation)');
       } else {
-        console.error('Error taking picture:', error);
+        console.error('Error taking picture:', error instanceof Error ? error.message : String(error));
         Alert.alert('Error', 'Failed to take picture. Please try again.');
       }
     } finally {
