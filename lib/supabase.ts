@@ -460,7 +460,8 @@ export const mergeDocuments = async (
         thumbnail_url: thumbnailUrl,
         ocr_text: combinedOcrText,
         ocr_processed: true,
-        page_count: documents.length
+        page_count: documents.length,
+        tags: []
       })
       .select()
       .single();
@@ -555,7 +556,8 @@ export const splitDocument = async (
           thumbnail_url: thumbnailUrl,
           ocr_text: combinedOcrText,
           ocr_processed: true,
-          page_count: pagesToInclude.length
+          page_count: pagesToInclude.length,
+          tags: []
         })
         .select()
         .single();

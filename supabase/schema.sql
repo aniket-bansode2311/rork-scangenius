@@ -129,10 +129,52 @@ CREATE INDEX IF NOT EXISTS documents_receipt_data_idx ON public.documents USING 
 CREATE INDEX IF NOT EXISTS documents_receipt_processed_idx ON public.documents(receipt_processed);
 CREATE INDEX IF NOT EXISTS documents_is_signed_idx ON public.documents(is_signed);
 
+-- Create signatures table for e-signature functionality
+CREATE TABLE IF NOT EXISTS public.signatures (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  name TEXT NOT NULL,
+  signature_data TEXT NOT NULL, -- Base64 encoded signature image
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable Row Level Security on signatures table
+ALTER TABLE public.signatures ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS policies for signatures table
+
+-- Policy: Users can view their own signatures
+CREATE POLICY "Users can view own signatures" ON public.signatures
+  FOR SELECT USING (auth.uid() = user_id);
+
+-- Policy: Users can insert their own signatures
+CREATE POLICY "Users can insert own signatures" ON public.signatures
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Policy: Users can update their own signatures
+CREATE POLICY "Users can update own signatures" ON public.signatures
+  FOR UPDATE USING (auth.uid() = user_id);
+
+-- Policy: Users can delete their own signatures
+CREATE POLICY "Users can delete own signatures" ON public.signatures
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- Create trigger to automatically update updated_at timestamp for signatures
+CREATE TRIGGER handle_signatures_updated_at
+  BEFORE UPDATE ON public.signatures
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- Create indexes for better performance on signatures table
+CREATE INDEX IF NOT EXISTS signatures_user_id_idx ON public.signatures(user_id);
+CREATE INDEX IF NOT EXISTS signatures_created_at_idx ON public.signatures(created_at);
+CREATE INDEX IF NOT EXISTS signatures_name_idx ON public.signatures(name);
+
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON public.profiles TO authenticated;
 GRANT SELECT ON public.profiles TO anon;
 GRANT ALL ON public.documents TO authenticated;
+GRANT ALL ON public.signatures TO authenticated;
 
 
