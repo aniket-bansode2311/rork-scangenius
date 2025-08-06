@@ -412,18 +412,28 @@ export class RealTimeDetector {
   private isDetecting = false;
   private detectionInterval: NodeJS.Timeout | null = null;
   private lastDetectionTime = 0;
-  private readonly DETECTION_THROTTLE = 500; // ms
+  private readonly DETECTION_THROTTLE = 1000; // Increased to 1000ms to reduce camera stress
+  private consecutiveErrors = 0;
+  private readonly MAX_CONSECUTIVE_ERRORS = 3;
 
   startRealTimeDetection(
     onDetection: (result: DetectionResult) => void,
     captureFrame: () => Promise<string | null>
   ): void {
-    if (this.isDetecting) return;
+    if (this.isDetecting) {
+      console.log('Real-time detection already running');
+      return;
+    }
     
     this.isDetecting = true;
+    this.consecutiveErrors = 0;
     console.log('Starting real-time document detection');
     
     this.detectionInterval = setInterval(async () => {
+      if (!this.isDetecting) {
+        return; // Stop if detection was disabled
+      }
+      
       const now = Date.now();
       if (now - this.lastDetectionTime < this.DETECTION_THROTTLE) {
         return;
@@ -431,13 +441,33 @@ export class RealTimeDetector {
       
       try {
         const frameUri = await captureFrame();
-        if (frameUri) {
+        if (frameUri && this.isDetecting) {
           const result = await documentDetectionService.detectDocumentInImage(frameUri);
-          onDetection(result);
-          this.lastDetectionTime = now;
+          if (this.isDetecting) { // Check again before calling callback
+            onDetection(result);
+            this.lastDetectionTime = now;
+            this.consecutiveErrors = 0; // Reset error count on success
+          }
+        } else if (!frameUri) {
+          this.consecutiveErrors++;
+          if (this.consecutiveErrors >= this.MAX_CONSECUTIVE_ERRORS) {
+            console.log('Too many consecutive frame capture failures, stopping detection');
+            this.stopRealTimeDetection();
+          }
         }
       } catch (error) {
-        console.error('Real-time detection error:', error);
+        this.consecutiveErrors++;
+        
+        // Only log non-camera errors
+        if (!error.message?.includes('unmounted') && !error.message?.includes('Camera')) {
+          console.error('Real-time detection error:', error);
+        }
+        
+        // Stop detection if too many consecutive errors
+        if (this.consecutiveErrors >= this.MAX_CONSECUTIVE_ERRORS) {
+          console.log('Too many consecutive detection errors, stopping');
+          this.stopRealTimeDetection();
+        }
       }
     }, this.DETECTION_THROTTLE);
   }
@@ -448,6 +478,7 @@ export class RealTimeDetector {
       this.detectionInterval = null;
     }
     this.isDetecting = false;
+    this.consecutiveErrors = 0;
     console.log('Stopped real-time document detection');
   }
 

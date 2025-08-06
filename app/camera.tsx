@@ -77,26 +77,51 @@ export default function CameraScreen() {
   }, [confidenceAnim, pulseAnim]);
   
   const captureFrame = useCallback(async (): Promise<string | null> => {
-    if (!cameraRef.current || isProcessing) return null;
+    // Check if camera is still mounted and available
+    if (!cameraRef.current || isProcessing) {
+      console.log('Camera not available for frame capture');
+      return null;
+    }
     
     try {
+      // Add a small delay to ensure camera is ready
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Check again after delay
+      if (!cameraRef.current) {
+        console.log('Camera unmounted during frame capture');
+        return null;
+      }
+      
       // For real-time detection, we'd capture a low-quality frame
-      // This is a simulation - in practice you'd use a different method
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.3,
+        quality: 0.1, // Very low quality for real-time detection
         base64: false,
         skipProcessing: true,
       });
       return photo?.uri || null;
     } catch (error) {
-      console.error('Error capturing frame:', error);
+      // Don't log errors for unmounted camera - this is expected
+      if (error.message?.includes('unmounted') || error.message?.includes('Camera')) {
+        console.log('Camera unavailable for frame capture (expected during navigation)');
+      } else {
+        console.error('Error capturing frame:', error);
+      }
       return null;
     }
   }, [isProcessing]);
   
   useEffect(() => {
     if (permission?.granted && autoDetectionEnabled) {
-      realTimeDetector.startRealTimeDetection(handleDetectionResult, captureFrame);
+      // Add a small delay to ensure camera is fully initialized
+      const timer = setTimeout(() => {
+        realTimeDetector.startRealTimeDetection(handleDetectionResult, captureFrame);
+      }, 1000);
+      
+      return () => {
+        clearTimeout(timer);
+        realTimeDetector.stopRealTimeDetection();
+      };
     }
     
     return () => {
@@ -144,11 +169,23 @@ export default function CameraScreen() {
   };
   
   const takePicture = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || isProcessing) return;
 
     try {
       setIsProcessing(true);
+      
+      // Stop real-time detection during photo capture
+      realTimeDetector.stopRealTimeDetection();
+      
       console.log('Taking picture...');
+      
+      // Add small delay to ensure camera is ready
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      if (!cameraRef.current) {
+        console.log('Camera unmounted during photo capture');
+        return;
+      }
       
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
@@ -195,12 +232,23 @@ export default function CameraScreen() {
       Alert.alert('Error', 'Failed to take picture. Please try again.');
     } finally {
       setIsProcessing(false);
+      
+      // Restart real-time detection if still enabled and on screen
+      if (autoDetectionEnabled && permission?.granted) {
+        setTimeout(() => {
+          realTimeDetector.startRealTimeDetection(handleDetectionResult, captureFrame);
+        }, 500);
+      }
     }
   };
 
   const handleClose = () => {
+    // Stop detection before navigating
     realTimeDetector.stopRealTimeDetection();
-    router.back();
+    // Add small delay to ensure cleanup
+    setTimeout(() => {
+      router.back();
+    }, 100);
   };
   
   const toggleAutoDetection = () => {
