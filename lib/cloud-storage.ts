@@ -275,7 +275,14 @@ class CloudStorageService {
     };
 
     const formData = new FormData();
-    formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    
+    if (Platform.OS === 'web') {
+      formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    } else {
+      // For React Native, append as string
+      formData.append('metadata', JSON.stringify(metadata));
+    }
+    
     formData.append('file', fileBlob, `${fileName}.jpg`);
 
     onProgress?.(50);

@@ -71,19 +71,18 @@ export const uploadImageToStorage = async (
       const response = await fetch(imageUri);
       fileData = await response.blob();
     } else {
-      // For mobile, read file as base64
+      // For mobile, read the file and create a proper format for Supabase
       const base64 = await FileSystem.readAsStringAsync(imageUri, {
         encoding: FileSystem.EncodingType.Base64,
       });
       
-      // Convert base64 to blob-like object
-      const byteCharacters = atob(base64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      // Convert base64 to ArrayBuffer for Supabase
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
       }
-      const byteArray = new Uint8Array(byteNumbers);
-      fileData = new Blob([byteArray], { type: 'image/jpeg' });
+      fileData = bytes.buffer;
     }
     
     const { data, error } = await supabase.storage
