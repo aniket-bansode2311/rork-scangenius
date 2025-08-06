@@ -35,9 +35,14 @@ import {
   Point,
   ImageProcessor 
 } from '@/lib/document-detection';
+import { 
+  imageEnhancementService, 
+  EnhancementOptions, 
+  ImageAnalysis 
+} from '@/lib/image-enhancement';
 
 type FilterType = 'original' | 'bw' | 'grayscale' | 'enhanced';
-type ProcessingMode = 'preview' | 'crop' | 'rotate' | 'filter';
+type ProcessingMode = 'preview' | 'crop' | 'rotate' | 'filter' | 'enhance';
 
 // Use types from document detection library
 type CornerPoint = Point;
@@ -67,7 +72,25 @@ export default function PhotoPreviewScreen() {
     enhanceContrast: boolean;
     sharpen: boolean;
     denoiseLevel: number;
+    removeGlare: boolean;
+    removeShadows: boolean;
   } | null>(null);
+  const [imageAnalysis, setImageAnalysis] = useState<ImageAnalysis | null>(null);
+  const [enhancementOptions, setEnhancementOptions] = useState<EnhancementOptions>({
+    autoContrast: true,
+    autoBrightness: true,
+    sharpen: true,
+    removeGlare: false,
+    removeShadows: false,
+    denoiseLevel: 0.3,
+    outputQuality: 0.95,
+    preserveColors: true
+  });
+  const [manualAdjustments, setManualAdjustments] = useState({
+    brightness: 0, // -100 to +100
+    contrast: 1.0, // 0.5 to 2.0
+    sharpness: 0.5 // 0 to 1
+  });
 
   const performOCR = useCallback(async () => {
     if (!photoUri) return;
@@ -180,31 +203,39 @@ export default function PhotoPreviewScreen() {
       const processingOptions = recommendedSettings || {
         enhanceContrast: true,
         sharpen: true,
-        denoiseLevel: 0.3
+        denoiseLevel: 0.3,
+        removeGlare: false,
+        removeShadows: false
       };
       
       console.log('Processing with options:', processingOptions);
       console.log('Perspective distortion level:', perspectiveDistortion.toFixed(3));
       
-      // Apply perspective correction using the advanced algorithm
-      const correctedImageUri = await documentDetectionService.processDocumentWithPerspectiveCorrection(
+      // Apply perspective correction and image enhancement using the advanced algorithm
+      const result = await documentDetectionService.processDocumentWithPerspectiveCorrection(
         photoUri,
         cropBounds,
         {
           ...processingOptions,
-          outputQuality: 0.95 // High quality for final output
+          outputQuality: 0.95, // High quality for final output
+          autoAnalysis: true
         }
       );
       
-      console.log('Perspective correction completed:', correctedImageUri);
+      const correctedImageUri = result.processedUri;
+      if (result.analysis) {
+        setImageAnalysis(result.analysis);
+      }
+      
+      console.log('Perspective correction and enhancement completed:', correctedImageUri);
       
       // Show success message with quality info
       const distortionLevel = perspectiveDistortion < 0.2 ? 'Low' : 
                             perspectiveDistortion < 0.4 ? 'Moderate' : 'High';
       
       Alert.alert(
-        'Perspective Correction Applied!', 
-        `Document processed successfully.\n\nDistortion level: ${distortionLevel}\nEnhancements applied: ${Object.entries(processingOptions).filter(([_, value]) => value === true).map(([key]) => key).join(', ')}`,
+        'Document Enhanced!', 
+        `Document processed successfully with automatic enhancements.\n\nDistortion level: ${distortionLevel}\nEnhancements applied: ${Object.entries(processingOptions).filter(([_, value]) => value === true).map(([key]) => key).join(', ')}`,
         [{ text: 'OK', style: 'default' }]
       );
     } catch (error) {
@@ -281,24 +312,38 @@ export default function PhotoPreviewScreen() {
         const processingOptions = recommendedSettings || {
           enhanceContrast: currentFilter === 'enhanced',
           sharpen: true,
-          denoiseLevel: 0.3
+          denoiseLevel: 0.3,
+          removeGlare: false,
+          removeShadows: false
         };
         
-        // Apply perspective correction with quality optimization
-        processedImageUri = await documentDetectionService.processDocumentWithPerspectiveCorrection(
+        // Apply perspective correction with quality optimization and image enhancement
+        const result = await documentDetectionService.processDocumentWithPerspectiveCorrection(
           photoUri,
           cropBounds,
           {
             ...processingOptions,
-            outputQuality: 0.95
+            outputQuality: 0.95,
+            autoAnalysis: true
           }
         );
+        
+        processedImageUri = result.processedUri;
+        if (result.analysis) {
+          setImageAnalysis(result.analysis);
+        }
         
         console.log('Advanced processing completed:', {
           originalUri: photoUri,
           processedUri: processedImageUri,
           perspectiveDistortion: perspectiveDistortion.toFixed(3),
-          settings: processingOptions
+          settings: processingOptions,
+          imageAnalysis: result.analysis ? {
+            brightness: result.analysis.brightness.toFixed(1),
+            contrast: result.analysis.contrast.toFixed(2),
+            hasGlare: result.analysis.hasGlare,
+            hasShadows: result.analysis.hasShadows
+          } : null
         });
       }
 
@@ -319,6 +364,7 @@ export default function PhotoPreviewScreen() {
           originalUri: photoUri,
           perspectiveDistortion: perspectiveDistortion,
           processingSettings: recommendedSettings,
+          imageAnalysis: imageAnalysis,
           filter: currentFilter,
           rotation: rotation,
           autoCropped: isAutoCropped,
@@ -354,6 +400,94 @@ export default function PhotoPreviewScreen() {
 
   const handleDownload = () => {
     Alert.alert('Download', 'Download functionality will be implemented here');
+  };
+
+  const analyzeImage = async () => {
+    if (!photoUri) return;
+    
+    try {
+      setIsProcessing(true);
+      console.log('Analyzing image for enhancement recommendations...');
+      
+      const analysis = await imageEnhancementService.analyzeImage(photoUri);
+      setImageAnalysis(analysis);
+      setEnhancementOptions(analysis.recommendedEnhancements);
+      
+      console.log('Image analysis completed:', {
+        brightness: analysis.brightness.toFixed(1),
+        contrast: analysis.contrast.toFixed(2),
+        hasGlare: analysis.hasGlare,
+        hasShadows: analysis.hasShadows,
+        recommendedEnhancements: Object.entries(analysis.recommendedEnhancements)
+          .filter(([_, value]) => value === true)
+          .map(([key]) => key)
+      });
+    } catch (error) {
+      console.error('Error analyzing image:', error);
+      Alert.alert('Analysis Failed', 'Could not analyze image for enhancement recommendations.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const applyEnhancements = async () => {
+    if (!photoUri) return;
+    
+    try {
+      setIsProcessing(true);
+      console.log('Applying image enhancements:', enhancementOptions);
+      
+      const enhancedUri = await imageEnhancementService.enhanceImage(photoUri, enhancementOptions);
+      
+      // Update the photo URI to show the enhanced version
+      // In a real implementation, you'd update the state to show the enhanced image
+      console.log('Image enhanced successfully:', enhancedUri);
+      
+      Alert.alert(
+        'Enhancement Applied!',
+        'Your image has been enhanced successfully.',
+        [{ text: 'OK', style: 'default' }]
+      );
+    } catch (error) {
+      console.error('Error applying enhancements:', error);
+      Alert.alert('Enhancement Failed', 'Could not apply image enhancements.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const applyManualAdjustment = async (type: 'brightness' | 'contrast' | 'sharpness') => {
+    if (!photoUri) return;
+    
+    try {
+      setIsProcessing(true);
+      let adjustedUri: string;
+      
+      switch (type) {
+        case 'brightness':
+          adjustedUri = await imageEnhancementService.adjustBrightness(photoUri, manualAdjustments.brightness);
+          break;
+        case 'contrast':
+          adjustedUri = await imageEnhancementService.adjustContrast(photoUri, manualAdjustments.contrast);
+          break;
+        case 'sharpness':
+          adjustedUri = await imageEnhancementService.applySharpen(photoUri, manualAdjustments.sharpness);
+          break;
+      }
+      
+      console.log(`${type} adjustment applied:`, adjustedUri);
+      
+      Alert.alert(
+        'Adjustment Applied!',
+        `${type.charAt(0).toUpperCase() + type.slice(1)} has been adjusted successfully.`,
+        [{ text: 'OK', style: 'default' }]
+      );
+    } catch (error) {
+      console.error(`Error applying ${type} adjustment:`, error);
+      Alert.alert('Adjustment Failed', `Could not apply ${type} adjustment.`);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
 
@@ -440,6 +574,250 @@ export default function PhotoPreviewScreen() {
             ))}
           </ScrollView>
         );
+      case 'enhance':
+        return (
+          <ScrollView style={styles.enhanceContainer}>
+            {/* Image Analysis Section */}
+            <View style={styles.analysisSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Image Analysis</Text>
+                <TouchableOpacity 
+                  style={styles.analyzeButton}
+                  onPress={analyzeImage}
+                  disabled={isProcessing}
+                >
+                  <Text style={styles.analyzeButtonText}>
+                    {isProcessing ? 'Analyzing...' : 'Analyze'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
+              {imageAnalysis && (
+                <View style={styles.analysisResults}>
+                  <View style={styles.analysisRow}>
+                    <Text style={styles.analysisLabel}>Brightness:</Text>
+                    <Text style={styles.analysisValue}>{imageAnalysis.brightness.toFixed(0)}/255</Text>
+                  </View>
+                  <View style={styles.analysisRow}>
+                    <Text style={styles.analysisLabel}>Contrast:</Text>
+                    <Text style={styles.analysisValue}>{(imageAnalysis.contrast * 100).toFixed(0)}%</Text>
+                  </View>
+                  <View style={styles.analysisRow}>
+                    <Text style={styles.analysisLabel}>Sharpness:</Text>
+                    <Text style={styles.analysisValue}>{(imageAnalysis.sharpness * 100).toFixed(0)}%</Text>
+                  </View>
+                  {imageAnalysis.hasGlare && (
+                    <Text style={styles.issueText}>⚠️ Glare detected</Text>
+                  )}
+                  {imageAnalysis.hasShadows && (
+                    <Text style={styles.issueText}>⚠️ Shadows detected</Text>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* Auto Enhancement Section */}
+            <View style={styles.enhancementSection}>
+              <Text style={styles.sectionTitle}>Automatic Enhancement</Text>
+              <View style={styles.enhancementOptions}>
+                <View style={styles.optionRow}>
+                  <Text style={styles.optionLabel}>Auto Contrast</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton,
+                      enhancementOptions.autoContrast && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setEnhancementOptions(prev => ({
+                      ...prev,
+                      autoContrast: !prev.autoContrast
+                    }))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText,
+                      enhancementOptions.autoContrast && styles.toggleButtonTextActive
+                    ]}>
+                      {enhancementOptions.autoContrast ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.optionRow}>
+                  <Text style={styles.optionLabel}>Sharpen</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton,
+                      enhancementOptions.sharpen && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setEnhancementOptions(prev => ({
+                      ...prev,
+                      sharpen: !prev.sharpen
+                    }))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText,
+                      enhancementOptions.sharpen && styles.toggleButtonTextActive
+                    ]}>
+                      {enhancementOptions.sharpen ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.optionRow}>
+                  <Text style={styles.optionLabel}>Remove Glare</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton,
+                      enhancementOptions.removeGlare && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setEnhancementOptions(prev => ({
+                      ...prev,
+                      removeGlare: !prev.removeGlare
+                    }))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText,
+                      enhancementOptions.removeGlare && styles.toggleButtonTextActive
+                    ]}>
+                      {enhancementOptions.removeGlare ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.optionRow}>
+                  <Text style={styles.optionLabel}>Remove Shadows</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton,
+                      enhancementOptions.removeShadows && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setEnhancementOptions(prev => ({
+                      ...prev,
+                      removeShadows: !prev.removeShadows
+                    }))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText,
+                      enhancementOptions.removeShadows && styles.toggleButtonTextActive
+                    ]}>
+                      {enhancementOptions.removeShadows ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              
+              <TouchableOpacity 
+                style={styles.applyButton}
+                onPress={applyEnhancements}
+                disabled={isProcessing}
+              >
+                <Text style={styles.applyButtonText}>
+                  {isProcessing ? 'Applying...' : 'Apply Auto Enhancement'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Manual Adjustments Section */}
+            <View style={styles.manualSection}>
+              <Text style={styles.sectionTitle}>Manual Adjustments</Text>
+              
+              <View style={styles.adjustmentRow}>
+                <Text style={styles.adjustmentLabel}>Brightness</Text>
+                <View style={styles.adjustmentControls}>
+                  <TouchableOpacity 
+                    style={styles.adjustmentButton}
+                    onPress={() => setManualAdjustments(prev => ({
+                      ...prev,
+                      brightness: Math.max(-100, prev.brightness - 10)
+                    }))}
+                  >
+                    <Text style={styles.adjustmentButtonText}>-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.adjustmentValue}>{manualAdjustments.brightness}</Text>
+                  <TouchableOpacity 
+                    style={styles.adjustmentButton}
+                    onPress={() => setManualAdjustments(prev => ({
+                      ...prev,
+                      brightness: Math.min(100, prev.brightness + 10)
+                    }))}
+                  >
+                    <Text style={styles.adjustmentButtonText}>+</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.applyAdjustmentButton}
+                    onPress={() => applyManualAdjustment('brightness')}
+                    disabled={isProcessing}
+                  >
+                    <Text style={styles.applyAdjustmentButtonText}>Apply</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              
+              <View style={styles.adjustmentRow}>
+                <Text style={styles.adjustmentLabel}>Contrast</Text>
+                <View style={styles.adjustmentControls}>
+                  <TouchableOpacity 
+                    style={styles.adjustmentButton}
+                    onPress={() => setManualAdjustments(prev => ({
+                      ...prev,
+                      contrast: Math.max(0.5, prev.contrast - 0.1)
+                    }))}
+                  >
+                    <Text style={styles.adjustmentButtonText}>-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.adjustmentValue}>{manualAdjustments.contrast.toFixed(1)}</Text>
+                  <TouchableOpacity 
+                    style={styles.adjustmentButton}
+                    onPress={() => setManualAdjustments(prev => ({
+                      ...prev,
+                      contrast: Math.min(2.0, prev.contrast + 0.1)
+                    }))}
+                  >
+                    <Text style={styles.adjustmentButtonText}>+</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.applyAdjustmentButton}
+                    onPress={() => applyManualAdjustment('contrast')}
+                    disabled={isProcessing}
+                  >
+                    <Text style={styles.applyAdjustmentButtonText}>Apply</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              
+              <View style={styles.adjustmentRow}>
+                <Text style={styles.adjustmentLabel}>Sharpness</Text>
+                <View style={styles.adjustmentControls}>
+                  <TouchableOpacity 
+                    style={styles.adjustmentButton}
+                    onPress={() => setManualAdjustments(prev => ({
+                      ...prev,
+                      sharpness: Math.max(0, prev.sharpness - 0.1)
+                    }))}
+                  >
+                    <Text style={styles.adjustmentButtonText}>-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.adjustmentValue}>{manualAdjustments.sharpness.toFixed(1)}</Text>
+                  <TouchableOpacity 
+                    style={styles.adjustmentButton}
+                    onPress={() => setManualAdjustments(prev => ({
+                      ...prev,
+                      sharpness: Math.min(1.0, prev.sharpness + 0.1)
+                    }))}
+                  >
+                    <Text style={styles.adjustmentButtonText}>+</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.applyAdjustmentButton}
+                    onPress={() => applyManualAdjustment('sharpness')}
+                    disabled={isProcessing}
+                  >
+                    <Text style={styles.applyAdjustmentButtonText}>Apply</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+        );
       default:
         return null;
     }
@@ -463,7 +841,8 @@ export default function PhotoPreviewScreen() {
           <Text style={styles.headerTitle}>
             {processingMode === 'preview' ? 'Preview' : 
              processingMode === 'crop' ? 'Crop & Correct' :
-             processingMode === 'rotate' ? 'Rotate' : 'Filters'}
+             processingMode === 'rotate' ? 'Rotate' : 
+             processingMode === 'filter' ? 'Filters' : 'Enhance'}
           </Text>
           {isAutoCropped && (
             <Text style={styles.headerSubtitle}>Auto-cropped document</Text>
@@ -475,6 +854,12 @@ export default function PhotoPreviewScreen() {
             ]}>
               Distortion: {perspectiveDistortion < 0.2 ? 'Low' : 
                          perspectiveDistortion < 0.4 ? 'Moderate' : 'High'}
+            </Text>
+          )}
+          {imageAnalysis && processingMode === 'enhance' && (
+            <Text style={styles.headerSubtitle}>
+              Quality: {imageAnalysis.sharpness > 0.7 ? 'Excellent' : 
+                       imageAnalysis.sharpness > 0.5 ? 'Good' : 'Needs Enhancement'}
             </Text>
           )}
         </View>
@@ -614,6 +999,23 @@ onLoad={() => {
             styles.modeButtonText,
             processingMode === 'filter' && styles.modeButtonTextActive
           ]}>Filters</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[
+            styles.modeButton,
+            processingMode === 'enhance' && styles.modeButtonActive
+          ]}
+          onPress={() => setProcessingMode('enhance')}
+        >
+          <Text style={[
+            styles.modeButtonText,
+            processingMode === 'enhance' && styles.modeButtonTextActive
+          ]}>✨</Text>
+          <Text style={[
+            styles.modeButtonText,
+            processingMode === 'enhance' && styles.modeButtonTextActive
+          ]}>Enhance</Text>
         </TouchableOpacity>
       </View>
 
@@ -930,5 +1332,155 @@ const styles = StyleSheet.create({
   },
   lowDistortion: {
     color: '#4ECDC4',
+  },
+  enhanceContainer: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    maxHeight: 400,
+  },
+  analysisSection: {
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    color: Colors.background,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  analyzeButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+  },
+  analyzeButtonText: {
+    color: Colors.background,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  analysisResults: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+  },
+  analysisRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  analysisLabel: {
+    color: Colors.gray[300],
+    fontSize: 14,
+  },
+  analysisValue: {
+    color: Colors.background,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  issueText: {
+    color: '#FFC107',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  enhancementSection: {
+    marginBottom: 20,
+  },
+  enhancementOptions: {
+    marginBottom: 12,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  optionLabel: {
+    color: Colors.background,
+    fontSize: 14,
+  },
+  toggleButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    minWidth: 40,
+  },
+  toggleButtonActive: {
+    backgroundColor: Colors.primary,
+  },
+  toggleButtonText: {
+    color: Colors.gray[300],
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  toggleButtonTextActive: {
+    color: Colors.background,
+    fontWeight: '600',
+  },
+  applyButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: Colors.success,
+    alignItems: 'center',
+  },
+  applyButtonText: {
+    color: Colors.background,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  manualSection: {
+    marginBottom: 20,
+  },
+  adjustmentRow: {
+    marginBottom: 12,
+  },
+  adjustmentLabel: {
+    color: Colors.background,
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  adjustmentControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  adjustmentButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  adjustmentButtonText: {
+    color: Colors.background,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  adjustmentValue: {
+    color: Colors.background,
+    fontSize: 14,
+    fontWeight: '500',
+    minWidth: 40,
+    textAlign: 'center',
+  },
+  applyAdjustmentButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+  },
+  applyAdjustmentButtonText: {
+    color: Colors.background,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

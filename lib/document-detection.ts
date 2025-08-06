@@ -1,5 +1,6 @@
 import { Dimensions } from 'react-native';
 import * as FileSystem from 'expo-file-system';
+import { imageEnhancementService, EnhancementOptions, ImageAnalysis } from './image-enhancement';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -689,7 +690,7 @@ export class ImageCropper {
     }
   }
 
-  // Enhanced processing pipeline with quality optimization
+  // Enhanced processing pipeline with automatic image enhancement
   static async processDocumentImage(
     imageUri: string,
     bounds: DocumentBounds,
@@ -698,34 +699,81 @@ export class ImageCropper {
       sharpen?: boolean;
       denoiseLevel?: number;
       outputQuality?: number;
+      removeGlare?: boolean;
+      removeShadows?: boolean;
+      autoAnalysis?: boolean;
     } = {}
-  ): Promise<string> {
+  ): Promise<{ processedUri: string; analysis?: ImageAnalysis }> {
     try {
-      console.log('Starting enhanced document processing pipeline');
+      console.log('Starting enhanced document processing pipeline with image enhancement');
       
       const {
         enhanceContrast = true,
         sharpen = true,
         denoiseLevel = 0.3,
-        outputQuality = 0.9
+        outputQuality = 0.95,
+        removeGlare = false,
+        removeShadows = false,
+        autoAnalysis = true
       } = options;
       
       // Step 1: Apply perspective correction
+      console.log('Step 1: Applying perspective correction...');
       const correctedUri = await this.applyPerspectiveCorrection(imageUri, bounds);
       
-      // Step 2: Apply image enhancements (simulated)
-      if (enhanceContrast || sharpen || denoiseLevel > 0) {
-        console.log('Applying image enhancements...');
-        console.log('- Contrast enhancement:', enhanceContrast);
-        console.log('- Sharpening:', sharpen);
-        console.log('- Denoise level:', denoiseLevel);
+      // Step 2: Apply automatic image enhancement
+      console.log('Step 2: Applying image enhancements...');
+      
+      const enhancementOptions: EnhancementOptions = {
+        autoContrast: enhanceContrast,
+        autoBrightness: true,
+        sharpen,
+        removeGlare,
+        removeShadows,
+        denoiseLevel,
+        outputQuality,
+        preserveColors: true
+      };
+      
+      let enhancedUri: string;
+      let analysis: ImageAnalysis | undefined;
+      
+      if (autoAnalysis) {
+        // Use automatic analysis to determine optimal enhancements
+        const result = await imageEnhancementService.enhanceWithAutoAnalysis(
+          correctedUri,
+          enhancementOptions
+        );
+        enhancedUri = result.enhancedUri;
+        analysis = result.analysis;
         
-        // Simulate enhancement processing time
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log('Applied automatic enhancements based on analysis:', {
+          brightness: analysis.brightness.toFixed(1),
+          contrast: analysis.contrast.toFixed(2),
+          hasGlare: analysis.hasGlare,
+          hasShadows: analysis.hasShadows,
+          appliedEnhancements: Object.entries(analysis.recommendedEnhancements)
+            .filter(([_, value]) => value === true)
+            .map(([key]) => key)
+        });
+      } else {
+        // Use manual enhancement options
+        enhancedUri = await imageEnhancementService.enhanceImage(
+          correctedUri,
+          enhancementOptions
+        );
+        
+        console.log('Applied manual enhancements:', {
+          enhanceContrast,
+          sharpen,
+          removeGlare,
+          removeShadows,
+          denoiseLevel
+        });
       }
       
-      console.log('Document processing pipeline completed');
-      return correctedUri;
+      console.log('Document processing pipeline completed successfully');
+      return { processedUri: enhancedUri, analysis };
     } catch (error) {
       console.error('Error in document processing pipeline:', error);
       throw error;
@@ -749,7 +797,7 @@ export const documentDetectionService = {
     return await ImageCropper.applyPerspectiveCorrection(croppedUri, bounds);
   },
 
-  // Enhanced processing with perspective correction and quality optimization
+  // Enhanced processing with perspective correction and automatic image enhancement
   async processDocumentWithPerspectiveCorrection(
     imageUri: string,
     bounds: DocumentBounds,
@@ -758,9 +806,12 @@ export const documentDetectionService = {
       sharpen?: boolean;
       denoiseLevel?: number;
       outputQuality?: number;
+      removeGlare?: boolean;
+      removeShadows?: boolean;
+      autoAnalysis?: boolean;
     }
-  ): Promise<string> {
-    console.log('Processing document with advanced perspective correction');
+  ): Promise<{ processedUri: string; analysis?: ImageAnalysis }> {
+    console.log('Processing document with advanced perspective correction and image enhancement');
     return await ImageCropper.processDocumentImage(imageUri, bounds, options);
   },
 
@@ -771,6 +822,8 @@ export const documentDetectionService = {
       enhanceContrast: boolean;
       sharpen: boolean;
       denoiseLevel: number;
+      removeGlare: boolean;
+      removeShadows: boolean;
     };
   } {
     const { topLeft, topRight, bottomLeft, bottomRight } = bounds;
@@ -795,7 +848,9 @@ export const documentDetectionService = {
     const recommendedSettings = {
       enhanceContrast: perspectiveDistortion > 0.3, // High distortion may need contrast boost
       sharpen: perspectiveDistortion > 0.2, // Moderate distortion benefits from sharpening
-      denoiseLevel: perspectiveDistortion > 0.4 ? 0.5 : 0.3 // Higher noise reduction for severe distortion
+      denoiseLevel: perspectiveDistortion > 0.4 ? 0.5 : 0.3, // Higher noise reduction for severe distortion
+      removeGlare: perspectiveDistortion > 0.5, // Severe distortion often indicates lighting issues
+      removeShadows: perspectiveDistortion > 0.4 // Moderate to high distortion may have shadows
     };
     
     console.log('Document quality analysis:', {
@@ -829,7 +884,7 @@ export class RealTimeDetector {
     this.consecutiveErrors = 0;
     console.log('Starting real-time document detection');
     
-    this.detectionInterval = setInterval(async () => {
+    this.detectionInterval = window.setInterval(async () => {
       if (!this.isDetecting) {
         return; // Stop if detection was disabled
       }
@@ -875,7 +930,7 @@ export class RealTimeDetector {
 
   stopRealTimeDetection(): void {
     if (this.detectionInterval) {
-      clearInterval(this.detectionInterval);
+      window.clearInterval(this.detectionInterval);
       this.detectionInterval = null;
     }
     this.isDetecting = false;
