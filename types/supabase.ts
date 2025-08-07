@@ -47,6 +47,7 @@ export type Document = {
   ocr_processed?: boolean;
   ocr_language?: string;
   tags?: string[];
+  category?: string;
   ai_processed?: boolean;
   page_count?: number;
   parent_document_id?: string | null;
@@ -125,6 +126,7 @@ export type Database = {
           ocr_processed?: boolean;
           ocr_language?: string;
           tags?: string[];
+          category?: string;
           ai_processed?: boolean;
           page_count?: number;
           parent_document_id?: string | null;
@@ -143,6 +145,7 @@ export type Database = {
           ocr_processed?: boolean;
           ocr_language?: string;
           tags?: string[];
+          category?: string;
           ai_processed?: boolean;
           page_count?: number;
           parent_document_id?: string | null;

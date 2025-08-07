@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS public.documents (
   ocr_processed BOOLEAN DEFAULT FALSE,
   ocr_language TEXT,
   tags TEXT[] DEFAULT '{}',
+  category TEXT,
   ai_processed BOOLEAN DEFAULT FALSE,
   page_count INTEGER DEFAULT 1,
   parent_document_id UUID REFERENCES public.documents(id) ON DELETE CASCADE,
@@ -124,6 +125,7 @@ CREATE INDEX IF NOT EXISTS documents_ocr_text_idx ON public.documents USING gin(
 CREATE INDEX IF NOT EXISTS documents_ocr_processed_idx ON public.documents(ocr_processed);
 CREATE INDEX IF NOT EXISTS documents_ai_processed_idx ON public.documents(ai_processed);
 CREATE INDEX IF NOT EXISTS documents_tags_idx ON public.documents USING gin(tags);
+CREATE INDEX IF NOT EXISTS documents_category_idx ON public.documents(category);
 CREATE INDEX IF NOT EXISTS documents_parent_document_id_idx ON public.documents(parent_document_id);
 CREATE INDEX IF NOT EXISTS documents_page_order_idx ON public.documents(page_order);
 CREATE INDEX IF NOT EXISTS documents_receipt_data_idx ON public.documents USING gin(receipt_data);

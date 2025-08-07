@@ -10,19 +10,22 @@ import {
   Platform,
   ActivityIndicator
 } from 'react-native';
-import { X, Wand2 } from 'lucide-react-native';
+import { X, Wand2, Tags } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
 import { trpc } from '@/lib/trpc';
+import { DocumentTagsDialog } from '@/components/DocumentTagsDialog';
 
 interface SaveDocumentDialogProps {
   visible: boolean;
   onClose: () => void;
-  onSave: (title: string, tags?: string[]) => Promise<void>;
+  onSave: (title: string, tags?: string[], category?: string) => Promise<void>;
   loading?: boolean;
   ocrText?: string;
+  receiptData?: any;
   currentTags?: string[];
+  currentCategory?: string;
 }
 
 export function SaveDocumentDialog({
@@ -31,11 +34,15 @@ export function SaveDocumentDialog({
   onSave,
   loading = false,
   ocrText = '',
-  currentTags = []
+  receiptData,
+  currentTags = [],
+  currentCategory = ''
 }: SaveDocumentDialogProps) {
   const [title, setTitle] = useState<string>('');
   const [tags, setTags] = useState<string[]>(currentTags);
+  const [category, setCategory] = useState<string>(currentCategory);
   const [saving, setSaving] = useState<boolean>(false);
+  const [showTagsDialog, setShowTagsDialog] = useState<boolean>(false);
   const [generatingSuggestion, setGeneratingSuggestion] = useState<boolean>(false);
   const [lastSuggestion, setLastSuggestion] = useState<{
     title: string;
@@ -106,9 +113,10 @@ export function SaveDocumentDialog({
 
     try {
       setSaving(true);
-      await onSave(title.trim(), tags);
+      await onSave(title.trim(), tags, category);
       setTitle('');
       setTags([]);
+      setCategory('');
       onClose();
     } catch (error) {
       console.error('Error saving document:', error);
@@ -122,9 +130,17 @@ export function SaveDocumentDialog({
     if (!saving && !loading) {
       setTitle('');
       setTags([]);
+      setCategory('');
       setLastSuggestion(null);
       setAutoSuggestionAttempted(false);
       onClose();
+    }
+  };
+
+  const handleTagsApply = (newTags: string[], newCategory?: string) => {
+    setTags(newTags);
+    if (newCategory) {
+      setCategory(newCategory);
     }
   };
 
@@ -210,9 +226,29 @@ export function SaveDocumentDialog({
                 testID="document-title-input"
               />
               
-              {tags.length > 0 && (
-                <View style={styles.tagsSection}>
-                  <Text style={styles.label}>Tags</Text>
+              <View style={styles.tagsSection}>
+                <View style={styles.tagsSectionHeader}>
+                  <Text style={styles.label}>Tags & Category</Text>
+                  <TouchableOpacity
+                    style={styles.tagsButton}
+                    onPress={() => setShowTagsDialog(true)}
+                    disabled={saving || loading}
+                  >
+                    <Tags size={16} color={Colors.primary} />
+                    <Text style={styles.tagsButtonText}>Manage Tags</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {category && (
+                  <View style={styles.categoryDisplay}>
+                    <Text style={styles.categoryLabel}>Category:</Text>
+                    <View style={styles.categoryBadge}>
+                      <Text style={styles.categoryBadgeText}>{category}</Text>
+                    </View>
+                  </View>
+                )}
+                
+                {tags.length > 0 && (
                   <View style={styles.tagsContainer}>
                     {tags.map((tag, index) => (
                       <TouchableOpacity
@@ -226,8 +262,8 @@ export function SaveDocumentDialog({
                       </TouchableOpacity>
                     ))}
                   </View>
-                </View>
-              )}
+                )}
+              </View>
               
               {lastSuggestion && (
                 <View style={styles.suggestionInfo}>
@@ -260,7 +296,15 @@ export function SaveDocumentDialog({
         </TouchableOpacity>
       </KeyboardAvoidingView>
       
-
+      <DocumentTagsDialog
+        visible={showTagsDialog}
+        onClose={() => setShowTagsDialog(false)}
+        onApply={handleTagsApply}
+        ocrText={ocrText}
+        receiptData={receiptData}
+        currentTags={tags}
+        currentCategory={category}
+      />
     </Modal>
   );
 }
@@ -370,6 +414,50 @@ const styles = StyleSheet.create({
   },
   tagsSection: {
     marginTop: 16,
+  },
+  tagsSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  tagsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: Colors.gray[100],
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  tagsButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.primary,
+    marginLeft: 4,
+  },
+  categoryDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  categoryLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.gray[600],
+    marginRight: 8,
+  },
+  categoryBadge: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  categoryBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.background,
   },
   tagsContainer: {
     flexDirection: 'row',

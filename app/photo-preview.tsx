@@ -316,7 +316,7 @@ export default function PhotoPreviewScreen() {
     setShowSaveDialog(true);
   };
 
-  const handleSaveDocument = async (title: string, tags: string[] = []) => {
+  const handleSaveDocument = async (title: string, tags: string[] = [], category?: string) => {
     if (!user || !photoUri) {
       throw new Error('Missing user or photo data');
     }
