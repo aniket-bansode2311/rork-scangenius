@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,13 +7,14 @@ import {
   TouchableOpacity,
   Alert,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  ActivityIndicator
 } from 'react-native';
-import { X, Sparkles } from 'lucide-react-native';
+import { X, Wand2 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
-import SmartSuggestionsDialog from '@/components/SmartSuggestionsDialog';
+import { trpc } from '@/lib/trpc';
 
 interface SaveDocumentDialogProps {
   visible: boolean;
@@ -35,7 +36,14 @@ export function SaveDocumentDialog({
   const [title, setTitle] = useState<string>('');
   const [tags, setTags] = useState<string[]>(currentTags);
   const [saving, setSaving] = useState<boolean>(false);
-  const [showSmartSuggestions, setShowSmartSuggestions] = useState<boolean>(false);
+  const [generatingSuggestion, setGeneratingSuggestion] = useState<boolean>(false);
+  const [lastSuggestion, setLastSuggestion] = useState<{
+    title: string;
+    tags: string[];
+    confidence: number;
+    reasoning: string;
+  } | null>(null);
+  const [autoSuggestionAttempted, setAutoSuggestionAttempted] = useState<boolean>(false);
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -61,23 +69,76 @@ export function SaveDocumentDialog({
     if (!saving && !loading) {
       setTitle('');
       setTags([]);
+      setLastSuggestion(null);
+      setAutoSuggestionAttempted(false);
       onClose();
     }
   };
 
-  const handleSmartSuggestions = () => {
-    if (ocrText && ocrText.trim().length > 0) {
-      setShowSmartSuggestions(true);
-    } else {
-      Alert.alert('No Content', 'No text content available for AI analysis.');
+  // Auto-suggest title when dialog opens with OCR text
+  useEffect(() => {
+    if (visible && ocrText && ocrText.trim().length > 20 && !autoSuggestionAttempted && !title) {
+      setAutoSuggestionAttempted(true);
+      // Delay to allow dialog to fully open
+      const timer = setTimeout(() => {
+        handleAISuggestion();
+      }, 500);
+      return () => clearTimeout(timer);
     }
-  };
+  }, [visible, ocrText, autoSuggestionAttempted, title, handleAISuggestion]);
 
-  const handleApplySuggestions = (suggestedTitle: string, suggestedTags: string[]) => {
-    setTitle(suggestedTitle);
-    setTags(suggestedTags);
-    setShowSmartSuggestions(false);
-  };
+  const handleAISuggestion = useCallback(async () => {
+    if (!ocrText || ocrText.trim().length === 0) {
+      Alert.alert('No Content', 'No text content available for AI analysis.');
+      return;
+    }
+
+    if (ocrText.trim().length < 10) {
+      Alert.alert('Insufficient Content', 'Need more text content for accurate AI suggestions.');
+      return;
+    }
+
+    try {
+      setGeneratingSuggestion(true);
+      console.log('Requesting AI title suggestion for OCR text:', ocrText.substring(0, 100));
+      
+      const result = await trpc.ai.suggestTitle.mutate({
+        ocrText: ocrText.trim(),
+      });
+
+      console.log('AI suggestion result:', result);
+
+      if (result.suggestion) {
+        setLastSuggestion(result.suggestion);
+        
+        // Show confirmation dialog with the suggestion
+        Alert.alert(
+          'AI Suggestion',
+          `Title: "${result.suggestion.title}"\n\nTags: ${result.suggestion.tags.join(', ')}\n\nConfidence: ${result.suggestion.confidence}%\n\n${result.suggestion.reasoning}`,
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Apply',
+              onPress: () => {
+                setTitle(result.suggestion.title);
+                setTags(result.suggestion.tags);
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', result.error || 'Failed to generate suggestion');
+      }
+    } catch (error) {
+      console.error('Error getting AI suggestion:', error);
+      Alert.alert('Error', 'Failed to get AI suggestion. Please try again.');
+    } finally {
+      setGeneratingSuggestion(false);
+    }
+  }, [ocrText]);
 
   const handleRemoveTag = (tagToRemove: string) => {
     setTags(tags.filter(tag => tag !== tagToRemove));
@@ -120,12 +181,18 @@ export function SaveDocumentDialog({
                 <Text style={styles.label}>Document Title</Text>
                 {ocrText && ocrText.trim().length > 0 && (
                   <TouchableOpacity
-                    style={styles.smartButton}
-                    onPress={handleSmartSuggestions}
-                    disabled={saving || loading}
+                    style={[styles.smartButton, generatingSuggestion && styles.smartButtonDisabled]}
+                    onPress={handleAISuggestion}
+                    disabled={saving || loading || generatingSuggestion}
                   >
-                    <Sparkles size={16} color={Colors.primary} />
-                    <Text style={styles.smartButtonText}>AI Suggestions</Text>
+                    {generatingSuggestion ? (
+                      <ActivityIndicator size="small" color={Colors.primary} />
+                    ) : (
+                      <Wand2 size={16} color={Colors.primary} />
+                    )}
+                    <Text style={styles.smartButtonText}>
+                      {generatingSuggestion ? 'Analyzing...' : 'AI Suggest'}
+                    </Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -151,10 +218,19 @@ export function SaveDocumentDialog({
                         disabled={saving || loading}
                       >
                         <Text style={styles.tagText}>{tag}</Text>
-                        <X size={12} color={Colors.gray[600]} />
+                        <X size={12} color={Colors.background} />
                       </TouchableOpacity>
                     ))}
                   </View>
+                </View>
+              )}
+              
+              {lastSuggestion && (
+                <View style={styles.suggestionInfo}>
+                  <Text style={styles.suggestionLabel}>Last AI Suggestion</Text>
+                  <Text style={styles.suggestionText}>
+                    Confidence: {lastSuggestion.confidence}% • {lastSuggestion.reasoning}
+                  </Text>
                 </View>
               )}
             </View>
@@ -180,14 +256,7 @@ export function SaveDocumentDialog({
         </TouchableOpacity>
       </KeyboardAvoidingView>
       
-      <SmartSuggestionsDialog
-        visible={showSmartSuggestions}
-        onClose={() => setShowSmartSuggestions(false)}
-        onApply={handleApplySuggestions}
-        ocrText={ocrText}
-        currentTitle={title}
-        currentTags={tags}
-      />
+
     </Modal>
   );
 }
@@ -286,6 +355,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.primary,
   },
+  smartButtonDisabled: {
+    opacity: 0.6,
+  },
   smartButtonText: {
     fontSize: 12,
     fontWeight: '500',
@@ -315,5 +387,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     marginRight: 4,
+  },
+  suggestionInfo: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: Colors.gray[50],
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.primary,
+  },
+  suggestionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.primary,
+    marginBottom: 4,
+  },
+  suggestionText: {
+    fontSize: 11,
+    color: Colors.gray[600],
+    lineHeight: 16,
   },
 });

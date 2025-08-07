@@ -4,6 +4,7 @@ import { extractReceiptProcedure } from "./routes/receipts/extract/route";
 import { updateReceiptProcedure } from "./routes/receipts/update/route";
 import { checkReceiptProcedure } from "./routes/receipts/check/route";
 import { processOCRProcedure, reprocessOCRProcedure, batchProcessOCRProcedure } from "./routes/ocr/process/route";
+import { suggestTitleProcedure } from "./routes/ai/suggest-title/route";
 
 export const appRouter = createTRPCRouter({
   example: createTRPCRouter({
@@ -18,6 +19,9 @@ export const appRouter = createTRPCRouter({
     process: processOCRProcedure,
     reprocess: reprocessOCRProcedure,
     batchProcess: batchProcessOCRProcedure,
+  }),
+  ai: createTRPCRouter({
+    suggestTitle: suggestTitleProcedure,
   }),
 });
 
