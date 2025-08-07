@@ -8,7 +8,7 @@ import {
   Dimensions
 } from 'react-native';
 import { Image } from 'expo-image';
-import { MoreVertical, Share, Eye, Check, FileStack, Receipt } from 'lucide-react-native';
+import { MoreVertical, Share, Eye, Check, FileStack, Receipt, DollarSign } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 
 interface Document {
@@ -152,6 +152,24 @@ export function DocumentCard({
             )}
           </View>
         </View>
+        {document.receipt_data && (
+          <View style={styles.receiptInfo}>
+            <Text style={styles.receiptVendor} numberOfLines={1}>
+              {document.receipt_data.vendor_name || 'Receipt'}
+            </Text>
+            {document.receipt_data.total_amount && (
+              <View style={styles.receiptAmount}>
+                <DollarSign size={10} color={Colors.gray[600]} />
+                <Text style={styles.receiptAmountText}>
+                  {new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: document.receipt_data.currency || 'USD',
+                  }).format(document.receipt_data.total_amount)}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
         <Text style={styles.date}>
           {formatDate(document.created_at)}
         </Text>
@@ -280,6 +298,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#34C759',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  receiptInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.primary + '10',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  receiptVendor: {
+    fontSize: 11,
+    color: Colors.primary,
+    fontWeight: '500',
+    flex: 1,
+  },
+  receiptAmount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  receiptAmountText: {
+    fontSize: 11,
+    color: Colors.gray[600],
+    fontWeight: '600',
   },
   date: {
     fontSize: 12,

@@ -192,12 +192,169 @@ export const processOCRProcedure = protectedProcedure
         confidence: ocrResult.confidence
       });
       
+      // Check if this looks like a receipt and trigger automatic extraction
+      let receiptExtractionResult = null;
+      if (ocrResult.text && ocrResult.text.length > 20) {
+        try {
+          const receiptCheckResponse = await fetch('https://toolkit.rork.com/text/llm/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messages: [
+                {
+                  role: 'user',
+                  content: `Analyze the following OCR text and determine if it appears to be from a receipt or invoice. Look for indicators like business names, prices, totals, dates, payment methods, etc.
+
+OCR Text:
+${ocrResult.text}
+
+Respond with only "YES" if this appears to be a receipt/invoice, or "NO" if it doesn't.`
+                }
+              ]
+            })
+          });
+          
+          if (receiptCheckResponse.ok) {
+            const checkResult = await receiptCheckResponse.json();
+            const isReceipt = checkResult.completion?.trim().toUpperCase() === 'YES';
+            
+            if (isReceipt) {
+              console.log('Document appears to be a receipt, triggering automatic extraction...');
+              
+              // Trigger receipt extraction
+              const extractionResponse = await fetch('https://toolkit.rork.com/text/llm/', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  messages: [
+                    {
+                      role: 'user',
+                      content: `You are an expert at extracting structured data from receipt text. Analyze the following OCR text from a receipt and extract key information in JSON format.
+
+OCR Text:
+${ocrResult.text}
+
+Please extract the following information and return it as a valid JSON object:
+{
+  "vendor_name": "Business name",
+  "vendor_address": "Full address if available",
+  "vendor_phone": "Phone number if available",
+  "total_amount": 0.00,
+  "subtotal": 0.00,
+  "tax_amount": 0.00,
+  "tip_amount": 0.00,
+  "date": "YYYY-MM-DD format if available",
+  "time": "HH:MM format if available",
+  "receipt_number": "Receipt/transaction number if available",
+  "payment_method": "Cash/Card/etc if available",
+  "currency": "USD or other currency code",
+  "line_items": [
+    {
+      "description": "Item description",
+      "quantity": 1,
+      "unit_price": 0.00,
+      "total_price": 0.00
+    }
+  ]
+}
+
+Rules:
+1. Only include fields where you can confidently extract the information
+2. For amounts, use numbers (not strings)
+3. For dates, use YYYY-MM-DD format
+4. For times, use HH:MM format (24-hour)
+5. If you can't find a field, omit it from the JSON
+6. Be conservative - only include data you're confident about
+7. For line items, try to extract individual products/services with their prices
+8. Return ONLY the JSON object, no additional text
+
+If the text doesn't appear to be from a receipt, return: {"error": "Not a receipt"}`
+                    }
+                  ]
+                })
+              });
+              
+              if (extractionResponse.ok) {
+                const aiResult = await extractionResponse.json();
+                
+                if (aiResult.completion) {
+                  try {
+                    const cleanedResponse = aiResult.completion.trim();
+                    
+                    if (!cleanedResponse.includes('"error": "Not a receipt"')) {
+                      const receiptData = JSON.parse(cleanedResponse);
+                      
+                      // Add metadata
+                      receiptData.extracted_at = new Date().toISOString();
+                      
+                      // Calculate confidence score
+                      let score = 0;
+                      let maxScore = 0;
+                      
+                      maxScore += 20;
+                      if (receiptData.vendor_name) score += 20;
+                      
+                      maxScore += 20;
+                      if (receiptData.total_amount && receiptData.total_amount > 0) score += 20;
+                      
+                      maxScore += 15;
+                      if (receiptData.date) score += 15;
+                      
+                      maxScore += 15;
+                      if (receiptData.line_items && receiptData.line_items.length > 0) score += 15;
+                      
+                      maxScore += 10;
+                      if (receiptData.subtotal && receiptData.subtotal > 0) score += 5;
+                      if (receiptData.tax_amount && receiptData.tax_amount > 0) score += 5;
+                      
+                      maxScore += 20;
+                      if (receiptData.vendor_address) score += 5;
+                      if (receiptData.vendor_phone) score += 5;
+                      if (receiptData.time) score += 5;
+                      if (receiptData.receipt_number) score += 5;
+                      
+                      receiptData.confidence_score = Math.round((score / maxScore) * 100);
+                      
+                      // Update document with receipt data
+                      const { error: receiptUpdateError } = await supabase
+                        .from('documents')
+                        .update({
+                          receipt_data: receiptData,
+                          receipt_processed: true,
+                          updated_at: new Date().toISOString()
+                        })
+                        .eq('id', input.documentId)
+                        .eq('user_id', ctx.user.id);
+                      
+                      if (!receiptUpdateError) {
+                        receiptExtractionResult = receiptData;
+                        console.log('Receipt data extracted and saved automatically');
+                      }
+                    }
+                  } catch (parseError) {
+                    console.error('Error parsing receipt data:', parseError);
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error in automatic receipt extraction:', error);
+          // Don't fail the OCR process if receipt extraction fails
+        }
+      }
+      
       return {
         success: true,
         text: ocrResult.text,
         confidence: ocrResult.confidence,
         detectedLanguage: ocrResult.detectedLanguage,
-        alreadyProcessed: false
+        alreadyProcessed: false,
+        receiptData: receiptExtractionResult
       };
     } catch (error) {
       console.error('Error processing OCR:', error);
