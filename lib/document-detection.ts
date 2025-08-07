@@ -609,7 +609,7 @@ export class ImageCropper {
       const outputUri = outputPath || `${FileSystem.documentDirectory}${fileName}`;
       
       // Simulate cropping delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise<void>(resolve => setTimeout(resolve, 1000));
       
       // Copy original file as cropped (simulation)
       await FileSystem.copyAsync({
@@ -662,7 +662,7 @@ export class ImageCropper {
       const outputUri = outputPath || `${FileSystem.documentDirectory}${fileName}`;
       
       // Simulate perspective correction processing time
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise<void>(resolve => setTimeout(resolve, 2000));
       
       // In a real implementation, you would:
       // 1. Load the source image data
