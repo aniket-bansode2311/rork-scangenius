@@ -45,48 +45,6 @@ export function SaveDocumentDialog({
   } | null>(null);
   const [autoSuggestionAttempted, setAutoSuggestionAttempted] = useState<boolean>(false);
 
-  const handleSave = async () => {
-    if (!title.trim()) {
-      Alert.alert('Error', 'Please enter a document title');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      await onSave(title.trim(), tags);
-      setTitle('');
-      setTags([]);
-      onClose();
-    } catch (error) {
-      console.error('Error saving document:', error);
-      Alert.alert('Error', 'Failed to save document. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleClose = () => {
-    if (!saving && !loading) {
-      setTitle('');
-      setTags([]);
-      setLastSuggestion(null);
-      setAutoSuggestionAttempted(false);
-      onClose();
-    }
-  };
-
-  // Auto-suggest title when dialog opens with OCR text
-  useEffect(() => {
-    if (visible && ocrText && ocrText.trim().length > 20 && !autoSuggestionAttempted && !title) {
-      setAutoSuggestionAttempted(true);
-      // Delay to allow dialog to fully open
-      const timer = setTimeout(() => {
-        handleAISuggestion();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [visible, ocrText, autoSuggestionAttempted, title, handleAISuggestion]);
-
   const handleAISuggestion = useCallback(async () => {
     if (!ocrText || ocrText.trim().length === 0) {
       Alert.alert('No Content', 'No text content available for AI analysis.');
@@ -139,6 +97,52 @@ export function SaveDocumentDialog({
       setGeneratingSuggestion(false);
     }
   }, [ocrText]);
+
+  const handleSave = async () => {
+    if (!title.trim()) {
+      Alert.alert('Error', 'Please enter a document title');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await onSave(title.trim(), tags);
+      setTitle('');
+      setTags([]);
+      onClose();
+    } catch (error) {
+      console.error('Error saving document:', error);
+      Alert.alert('Error', 'Failed to save document. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClose = () => {
+    if (!saving && !loading) {
+      setTitle('');
+      setTags([]);
+      setLastSuggestion(null);
+      setAutoSuggestionAttempted(false);
+      onClose();
+    }
+  };
+
+
+
+  // Auto-suggest title when dialog opens with OCR text
+  useEffect(() => {
+    if (visible && ocrText && ocrText.trim().length > 20 && !autoSuggestionAttempted && !title) {
+      setAutoSuggestionAttempted(true);
+      // Delay to allow dialog to fully open
+      const timer = setTimeout(() => {
+        handleAISuggestion();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [visible, ocrText, autoSuggestionAttempted, title, handleAISuggestion]);
+
+
 
   const handleRemoveTag = (tagToRemove: string) => {
     setTags(tags.filter(tag => tag !== tagToRemove));
@@ -391,7 +395,7 @@ const styles = StyleSheet.create({
   suggestionInfo: {
     marginTop: 12,
     padding: 12,
-    backgroundColor: Colors.gray[50],
+    backgroundColor: Colors.gray[100],
     borderRadius: 8,
     borderLeftWidth: 3,
     borderLeftColor: Colors.primary,

@@ -15,7 +15,7 @@ type DocumentSuggestion = {
 
 export const suggestTitleProcedure = publicProcedure
   .input(suggestTitleSchema)
-  .mutation(async ({ input }) => {
+  .mutation(async ({ input }: { input: { ocrText: string; documentType?: string } }) => {
     const { ocrText, documentType } = input;
 
     try {

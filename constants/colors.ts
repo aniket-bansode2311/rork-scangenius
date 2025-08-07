@@ -11,6 +11,7 @@ export const Colors = {
   warning: "#FFAA00",
   error: "#FF3D71",
   gray: {
+    50: "#F8FAFC",
     100: "#F7F9FC",
     200: "#EDF1F7",
     300: "#E4E9F2",
