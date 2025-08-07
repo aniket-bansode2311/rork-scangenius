@@ -22,21 +22,29 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
     console.log('AuthGuard - User:', user?.email, 'Segments:', segments);
 
-    if (!user) {
-      // User is not authenticated
-      if (inTabsGroup) {
-        // Redirect to welcome if trying to access protected routes
-        router.replace('/welcome');
+    // Use setTimeout to avoid state updates during render
+    const handleNavigation = () => {
+      if (!user) {
+        // User is not authenticated
+        if (inTabsGroup) {
+          // Redirect to welcome if trying to access protected routes
+          router.replace('/welcome');
+        }
+        // Allow access to welcome and auth screens
+      } else {
+        // User is authenticated
+        if (inAuthGroup || isWelcome) {
+          // Redirect to main app if trying to access auth screens
+          router.replace('/(tabs)');
+        }
+        // Allow access to protected routes
       }
-      // Allow access to welcome and auth screens
-    } else {
-      // User is authenticated
-      if (inAuthGroup || isWelcome) {
-        // Redirect to main app if trying to access auth screens
-        router.replace('/(tabs)');
-      }
-      // Allow access to protected routes
-    }
+    };
+
+    // Defer navigation to avoid state updates during render
+    const timeoutId = setTimeout(handleNavigation, 0);
+    
+    return () => clearTimeout(timeoutId);
   }, [user, loading, segments, router]);
 
   if (loading) {
