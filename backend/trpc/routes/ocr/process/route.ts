@@ -3,6 +3,7 @@ import { protectedProcedure } from "../../../create-context";
 import { ImageAnnotatorClient } from '@google-cloud/vision';
 import { supabase } from "@/lib/supabase";
 import { Platform } from 'react-native';
+import { SUPPORTED_LANGUAGES } from '@/constants/languages';
 
 // Initialize Google Cloud Vision client
 const getVisionClient = () => {
@@ -40,8 +41,8 @@ const getImageBase64 = async (imageUri: string): Promise<string> => {
   }
 };
 
-// Process OCR using Google Cloud Vision
-const processGoogleCloudVisionOCR = async (imageUri: string) => {
+// Process OCR using Google Cloud Vision with language support
+const processGoogleCloudVisionOCR = async (imageUri: string, languageHints?: string[]) => {
   try {
     const client = getVisionClient();
     const base64Image = await getImageBase64(imageUri);
@@ -60,6 +61,9 @@ const processGoogleCloudVisionOCR = async (imageUri: string) => {
           maxResults: 1,
         },
       ],
+      imageContext: languageHints && languageHints.length > 0 && !languageHints.includes('auto') ? {
+        languageHints: languageHints.filter(lang => lang !== 'auto')
+      } : undefined,
     };
     
     console.log('Sending request to Google Cloud Vision API...');
@@ -96,9 +100,20 @@ const processGoogleCloudVisionOCR = async (imageUri: string) => {
       confidence = result.textAnnotations[0].confidence || 0;
     }
     
+    // Detect language from the result
+    let detectedLanguage = 'unknown';
+    if (result.fullTextAnnotation && result.fullTextAnnotation.pages && result.fullTextAnnotation.pages.length > 0) {
+      const page = result.fullTextAnnotation.pages[0];
+      if (page.property && page.property.detectedLanguages && page.property.detectedLanguages.length > 0) {
+        detectedLanguage = page.property.detectedLanguages[0].languageCode || 'unknown';
+      }
+    }
+    
     console.log('OCR processing completed:', {
       textLength: extractedText.length,
       confidence: confidence,
+      detectedLanguage: detectedLanguage,
+      languageHints: languageHints,
       hasFullTextAnnotation: !!result.fullTextAnnotation,
       textAnnotationsCount: result.textAnnotations?.length || 0
     });
@@ -106,6 +121,7 @@ const processGoogleCloudVisionOCR = async (imageUri: string) => {
     return {
       text: extractedText.trim(),
       confidence: confidence,
+      detectedLanguage: detectedLanguage,
       rawResult: result
     };
   } catch (error) {
@@ -120,6 +136,7 @@ export const processOCRProcedure = protectedProcedure
       documentId: z.string(),
       imageUri: z.string(),
       forceReprocess: z.boolean().optional().default(false),
+      languageHints: z.array(z.string()).optional(),
     })
   )
   .mutation(async ({ input, ctx }) => {
@@ -149,15 +166,16 @@ export const processOCRProcedure = protectedProcedure
         };
       }
       
-      // Process OCR using Google Cloud Vision
-      const ocrResult = await processGoogleCloudVisionOCR(input.imageUri);
+      // Process OCR using Google Cloud Vision with language hints
+      const ocrResult = await processGoogleCloudVisionOCR(input.imageUri, input.languageHints);
       
-      // Update document with OCR results
+      // Update document with OCR results including detected language
       const { error: updateError } = await supabase
         .from('documents')
         .update({
           ocr_text: ocrResult.text,
           ocr_processed: true,
+          ocr_language: ocrResult.detectedLanguage,
           updated_at: new Date().toISOString()
         })
         .eq('id', input.documentId)
@@ -178,6 +196,7 @@ export const processOCRProcedure = protectedProcedure
         success: true,
         text: ocrResult.text,
         confidence: ocrResult.confidence,
+        detectedLanguage: ocrResult.detectedLanguage,
         alreadyProcessed: false
       };
     } catch (error) {
@@ -203,6 +222,7 @@ export const reprocessOCRProcedure = protectedProcedure
     z.object({
       documentId: z.string(),
       imageUri: z.string(),
+      languageHints: z.array(z.string()).optional(),
     })
   )
   .mutation(async ({ input, ctx }) => {
@@ -222,15 +242,16 @@ export const reprocessOCRProcedure = protectedProcedure
         throw new Error('Document not found or access denied');
       }
       
-      // Process OCR using Google Cloud Vision
-      const ocrResult = await processGoogleCloudVisionOCR(input.imageUri);
+      // Process OCR using Google Cloud Vision with language hints
+      const ocrResult = await processGoogleCloudVisionOCR(input.imageUri, input.languageHints);
       
-      // Update document with new OCR results
+      // Update document with new OCR results including detected language
       const { error: updateError } = await supabase
         .from('documents')
         .update({
           ocr_text: ocrResult.text,
           ocr_processed: true,
+          ocr_language: ocrResult.detectedLanguage,
           updated_at: new Date().toISOString()
         })
         .eq('id', input.documentId)
@@ -250,7 +271,8 @@ export const reprocessOCRProcedure = protectedProcedure
       return {
         success: true,
         text: ocrResult.text,
-        confidence: ocrResult.confidence
+        confidence: ocrResult.confidence,
+        detectedLanguage: ocrResult.detectedLanguage
       };
     } catch (error) {
       console.error('Error reprocessing OCR:', error);
@@ -311,6 +333,7 @@ export const batchProcessOCRProcedure = protectedProcedure
               .update({
                 ocr_text: ocrResult.text,
                 ocr_processed: true,
+                ocr_language: ocrResult.detectedLanguage,
                 updated_at: new Date().toISOString()
               })
               .eq('id', doc.documentId)

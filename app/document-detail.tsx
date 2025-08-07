@@ -12,15 +12,17 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { Share, Download, ArrowLeft, MoreVertical, FileText, RefreshCw, Copy, Cloud, Receipt } from 'lucide-react-native';
+import { Share, Download, ArrowLeft, MoreVertical, FileText, RefreshCw, Copy, Cloud, Receipt, Globe } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { Container } from '@/components/Container';
 import { CloudExportDialog } from '@/components/CloudExportDialog';
+import { LanguageSelector } from '@/components/LanguageSelector';
 import ReceiptDataDialog from '@/components/ReceiptDataDialog';
 import ReceiptDataView from '@/components/ReceiptDataView';
 import { deleteDocument, getDocumentOCRText, reprocessDocumentOCR } from '@/lib/supabase';
 import { trpc } from '@/lib/trpc';
 import { ReceiptData } from '@/types/supabase';
+import { getLanguageByCode } from '@/constants/languages';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -33,6 +35,7 @@ export default function DocumentDetailScreen() {
     created_at: string;
     ocr_text?: string;
     ocr_processed?: string;
+    ocr_language?: string;
     receipt_data?: string;
     receipt_processed?: string;
   }>();
@@ -47,6 +50,9 @@ export default function DocumentDetailScreen() {
   const [showReceiptDialog, setShowReceiptDialog] = useState<boolean>(false);
   const [showReceiptData, setShowReceiptData] = useState<boolean>(false);
   const [receiptExtracting, setReceiptExtracting] = useState<boolean>(false);
+  const [showLanguageSelector, setShowLanguageSelector] = useState<boolean>(false);
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>(['auto']);
+  const [detectedLanguage, setDetectedLanguage] = useState<string | null>(params.ocr_language || null);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -109,19 +115,47 @@ export default function DocumentDetailScreen() {
 
 
 
+  // tRPC mutation for reprocessing OCR with language support
+  const reprocessOCRMutation = trpc.ocr.reprocess.useMutation({
+    onSuccess: (data) => {
+      console.log('OCR reprocessing completed:', data);
+      if (data.text && data.text.length > 0) {
+        setOcrText(data.text);
+      }
+      if (data.detectedLanguage && data.detectedLanguage !== 'unknown') {
+        setDetectedLanguage(data.detectedLanguage);
+        console.log('Detected language:', data.detectedLanguage);
+      }
+      Alert.alert('Success', 'OCR text has been reprocessed with the selected language settings.');
+    },
+    onError: (error) => {
+      console.error('OCR reprocessing failed:', error);
+      Alert.alert('Error', 'Failed to reprocess OCR. Please try again.');
+    },
+    onSettled: () => {
+      setOcrLoading(false);
+    }
+  });
+
   const handleReprocessOCR = async () => {
     try {
       setOcrLoading(true);
-      console.log('Reprocessing OCR for document:', params.id);
-      const result = await reprocessDocumentOCR(params.id, params.file_url);
-      setOcrText(result.text);
-      Alert.alert('Success', 'OCR text has been reprocessed');
+      console.log('Reprocessing OCR for document:', params.id, 'with languages:', selectedLanguages);
+      
+      reprocessOCRMutation.mutate({
+        documentId: params.id,
+        imageUri: params.file_url,
+        languageHints: selectedLanguages.length > 0 ? selectedLanguages : undefined
+      });
     } catch (error) {
       console.error('Error reprocessing OCR:', error);
       Alert.alert('Error', 'Failed to reprocess OCR. Please try again.');
-    } finally {
       setOcrLoading(false);
     }
+  };
+  
+  const handleReprocessOCRWithLanguage = () => {
+    setShowLanguageSelector(true);
   };
 
   const handleExtractReceiptData = async () => {
@@ -237,6 +271,10 @@ export default function DocumentDetailScreen() {
       actions.push({
         text: 'Reprocess OCR',
         onPress: handleReprocessOCR
+      });
+      actions.push({
+        text: 'Reprocess with Language',
+        onPress: handleReprocessOCRWithLanguage
       });
       
       // Add receipt extraction option if it looks like a receipt
@@ -399,9 +437,16 @@ export default function DocumentDetailScreen() {
                 testID="ocr-toggle-button"
               >
                 <FileText size={20} color={Colors.primary} />
-                <Text style={styles.ocrHeaderText}>
-                  {ocrLoading ? 'Processing OCR...' : 'Extracted Text'}
-                </Text>
+                <View style={styles.ocrHeaderContent}>
+                  <Text style={styles.ocrHeaderText}>
+                    {ocrLoading ? 'Processing OCR...' : 'Extracted Text'}
+                  </Text>
+                  {detectedLanguage && detectedLanguage !== 'unknown' && (
+                    <Text style={styles.languageIndicator}>
+                      {getLanguageByCode(detectedLanguage).name} ({detectedLanguage})
+                    </Text>
+                  )}
+                </View>
                 {ocrLoading && <RefreshCw size={16} color={Colors.gray[500]} />}
               </TouchableOpacity>
               
@@ -435,6 +480,16 @@ export default function DocumentDetailScreen() {
                     >
                       <RefreshCw size={16} color={Colors.primary} />
                       <Text style={styles.ocrActionText}>Reprocess</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={styles.ocrActionButton}
+                      onPress={handleReprocessOCRWithLanguage}
+                      disabled={ocrLoading}
+                      testID="reprocess-ocr-language-button"
+                    >
+                      <Globe size={16} color={Colors.primary} />
+                      <Text style={styles.ocrActionText}>Language</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -489,6 +544,23 @@ export default function DocumentDetailScreen() {
         documentId={params.id}
         initialData={receiptData || undefined}
         onSave={handleReceiptDataSave}
+      />
+      
+      {/* Language Selector */}
+      <LanguageSelector
+        visible={showLanguageSelector}
+        onClose={() => {
+          setShowLanguageSelector(false);
+          // If user selected languages, trigger reprocessing
+          if (selectedLanguages.length > 0 && !selectedLanguages.includes('auto')) {
+            handleReprocessOCR();
+          }
+        }}
+        selectedLanguages={selectedLanguages}
+        onLanguagesChange={setSelectedLanguages}
+        multiSelect={false}
+        title="Select OCR Language"
+        subtitle="Choose the language for reprocessing text recognition"
       />
     </Container>
   );
@@ -604,11 +676,18 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 8,
   },
+  ocrHeaderContent: {
+    flex: 1,
+  },
   ocrHeaderText: {
     fontSize: 16,
     fontWeight: '600',
     color: Colors.gray[900],
-    flex: 1,
+  },
+  languageIndicator: {
+    fontSize: 12,
+    color: Colors.gray[600],
+    marginTop: 2,
   },
   ocrTextContainer: {
     marginTop: 12,

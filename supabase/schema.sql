@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS public.documents (
   thumbnail_url TEXT,
   ocr_text TEXT,
   ocr_processed BOOLEAN DEFAULT FALSE,
+  ocr_language TEXT,
   tags TEXT[] DEFAULT '{}',
   ai_processed BOOLEAN DEFAULT FALSE,
   page_count INTEGER DEFAULT 1,

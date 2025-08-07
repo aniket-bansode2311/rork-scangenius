@@ -21,15 +21,18 @@ import {
   RotateCw,
   Palette,
   Square,
-  Maximize
+  Maximize,
+  Globe
 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { Button } from '@/components/Button';
 import { SaveDocumentDialog } from '@/components/SaveDocumentDialog';
+import { LanguageSelector } from '@/components/LanguageSelector';
 import { saveDocumentToDatabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { extractTextFromImage, isOCRConfigured } from '@/lib/ocr';
 import { trpc } from '@/lib/trpc';
+import { SUPPORTED_LANGUAGES, getLanguageByCode } from '@/constants/languages';
 import { 
   documentDetectionService, 
   DocumentBounds, 
@@ -69,6 +72,8 @@ export default function PhotoPreviewScreen() {
   const [ocrText, setOcrText] = useState<string>('');
   const [isPerformingOCR, setIsPerformingOCR] = useState<boolean>(false);
   const [isProcessingOCR, setIsProcessingOCR] = useState<boolean>(false);
+  const [showLanguageSelector, setShowLanguageSelector] = useState<boolean>(false);
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>(['auto']);
   
   // tRPC mutations for OCR processing
   const processOCRMutation = trpc.ocr.process.useMutation({
@@ -76,6 +81,9 @@ export default function PhotoPreviewScreen() {
       console.log('OCR processing completed:', data);
       if (data.text && data.text.length > 0) {
         setOcrText(data.text);
+      }
+      if (data.detectedLanguage && data.detectedLanguage !== 'unknown') {
+        console.log('Detected language:', data.detectedLanguage);
       }
     },
     onError: (error) => {
@@ -400,7 +408,8 @@ export default function PhotoPreviewScreen() {
         processOCRMutation.mutate({
           documentId: savedDocument.id,
           imageUri: processedImageUri,
-          forceReprocess: false
+          forceReprocess: false,
+          languageHints: selectedLanguages.length > 0 ? selectedLanguages : undefined
         });
       }
       
@@ -1051,6 +1060,25 @@ onLoad={() => {
         </TouchableOpacity>
       </View>
 
+      {/* Language Selection */}
+      <View style={styles.languageSection}>
+        <TouchableOpacity
+          style={styles.languageButton}
+          onPress={() => setShowLanguageSelector(true)}
+          testID="language-selector-button"
+        >
+          <Globe size={20} color={Colors.primary} />
+          <Text style={styles.languageButtonText}>
+            {selectedLanguages.includes('auto') 
+              ? 'Auto-detect' 
+              : selectedLanguages.length === 1 
+                ? getLanguageByCode(selectedLanguages[0]).name
+                : `${selectedLanguages.length} languages`
+            }
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Bottom Controls */}
       <View style={styles.controls}>
         <TouchableOpacity 
@@ -1088,6 +1116,17 @@ onLoad={() => {
         onClose={() => setShowSaveDialog(false)}
         onSave={handleSaveDocument}
         ocrText={ocrText}
+      />
+      
+      {/* Language Selector */}
+      <LanguageSelector
+        visible={showLanguageSelector}
+        onClose={() => setShowLanguageSelector(false)}
+        selectedLanguages={selectedLanguages}
+        onLanguagesChange={setSelectedLanguages}
+        multiSelect={false}
+        title="Select OCR Language"
+        subtitle="Choose the language for text recognition"
       />
     </View>
   );
@@ -1514,5 +1553,29 @@ const styles = StyleSheet.create({
     color: Colors.background,
     fontSize: 12,
     fontWeight: '600',
+  },
+  languageSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  languageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  languageButtonText: {
+    color: Colors.background,
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 });
