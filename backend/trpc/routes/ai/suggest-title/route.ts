@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { publicProcedure } from "../../create-context";
+import { publicProcedure } from "../../../create-context";
 
 const suggestTitleSchema = z.object({
   ocrText: z.string().min(1, "OCR text is required"),
@@ -15,7 +15,7 @@ type DocumentSuggestion = {
 
 export const suggestTitleProcedure = publicProcedure
   .input(suggestTitleSchema)
-  .mutation(async ({ input }) => {
+  .mutation(async ({ input }: { input: z.infer<typeof suggestTitleSchema> }) => {
     const { ocrText, documentType } = input;
 
     try {
