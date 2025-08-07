@@ -44,6 +44,12 @@ import {
   EnhancementOptions, 
   ImageAnalysis 
 } from '@/lib/image-enhancement';
+import { 
+  imageCompressionService,
+  CompressionLevel,
+  CompressionResult
+} from '@/lib/image-compression';
+import * as FileSystem from 'expo-file-system';
 
 type FilterType = 'original' | 'bw' | 'grayscale' | 'enhanced';
 type ProcessingMode = 'preview' | 'crop' | 'rotate' | 'filter' | 'enhance';
@@ -107,6 +113,7 @@ export default function PhotoPreviewScreen() {
     removeShadows: boolean;
   } | null>(null);
   const [imageAnalysis, setImageAnalysis] = useState<ImageAnalysis | null>(null);
+  const [originalFileSize, setOriginalFileSize] = useState<number>(0);
   const [enhancementOptions, setEnhancementOptions] = useState<EnhancementOptions>({
     autoContrast: true,
     autoBrightness: true,
@@ -201,8 +208,21 @@ export default function PhotoPreviewScreen() {
     if (photoUri) {
       detectDocumentBorders();
       performOCR();
+      getOriginalFileSize();
     }
   }, [photoUri, detectDocumentBorders, performOCR]);
+
+  const getOriginalFileSize = async () => {
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(photoUri);
+      if (fileInfo.exists && fileInfo.size) {
+        setOriginalFileSize(fileInfo.size);
+        console.log('Original file size:', fileInfo.size, 'bytes');
+      }
+    } catch (error) {
+      console.error('Error getting file size:', error);
+    }
+  };
 
   if (!photoUri) {
     return (
@@ -316,7 +336,12 @@ export default function PhotoPreviewScreen() {
     setShowSaveDialog(true);
   };
 
-  const handleSaveDocument = async (title: string, tags: string[] = [], category?: string) => {
+  const handleSaveDocument = async (
+    title: string, 
+    tags: string[] = [], 
+    category?: string,
+    compressionLevel: CompressionLevel = 'medium'
+  ) => {
     if (!user || !photoUri) {
       throw new Error('Missing user or photo data');
     }
@@ -335,6 +360,7 @@ export default function PhotoPreviewScreen() {
 
       // Apply advanced processing pipeline
       let processedImageUri = photoUri;
+      let compressionResult: CompressionResult | null = null;
       
       if (cropBounds) {
         console.log('Applying perspective correction and enhancements...');
@@ -379,10 +405,27 @@ export default function PhotoPreviewScreen() {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
+      // Apply image compression
+      console.log('Applying image compression with level:', compressionLevel);
+      compressionResult = await imageCompressionService.compressImage(processedImageUri, {
+        level: compressionLevel
+      });
+      
+      console.log('Compression completed:', {
+        originalSize: compressionResult.originalSize,
+        compressedSize: compressionResult.compressedSize,
+        compressionRatio: (compressionResult.compressionRatio * 100).toFixed(1) + '%',
+        format: compressionResult.format
+      });
+      
+      // Use compressed image for final storage
+      processedImageUri = compressionResult.compressedUri;
+
       // Save to Supabase with OCR text, tags, and processing metadata
       const savedDocument = await saveDocumentToDatabase({
         title,
-        imageUri: processedImageUri, // Use the processed image
+        imageUri: processedImageUri, // Use the compressed image
+        thumbnailUri: compressionResult?.thumbnailUri,
         userId: user.id,
         ocrText: ocrText || undefined,
         tags: tags.length > 0 ? tags : undefined,
@@ -390,11 +433,17 @@ export default function PhotoPreviewScreen() {
           originalUri: photoUri,
           perspectiveDistortion: perspectiveDistortion,
           processingSettings: recommendedSettings,
-          // imageAnalysis removed as it's not part of SaveDocumentParams metadata type
           filter: currentFilter,
           rotation: rotation,
           autoCropped: isAutoCropped,
-          confidence: cropBounds?.confidence || 0
+          confidence: cropBounds?.confidence || 0,
+          compression: compressionResult ? {
+            level: compressionLevel,
+            originalSize: compressionResult.originalSize,
+            compressedSize: compressionResult.compressedSize,
+            compressionRatio: compressionResult.compressionRatio,
+            format: compressionResult.format
+          } : undefined
         }
       });
 
@@ -1116,6 +1165,8 @@ onLoad={() => {
         onClose={() => setShowSaveDialog(false)}
         onSave={handleSaveDocument}
         ocrText={ocrText}
+        imageUri={photoUri}
+        originalFileSize={originalFileSize}
       />
       
       {/* Language Selector */}

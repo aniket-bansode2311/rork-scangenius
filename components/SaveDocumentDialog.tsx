@@ -10,22 +10,26 @@ import {
   Platform,
   ActivityIndicator
 } from 'react-native';
-import { X, Wand2, Tags } from 'lucide-react-native';
+import { X, Wand2, Tags, Settings } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
 import { trpc } from '@/lib/trpc';
 import { DocumentTagsDialog } from '@/components/DocumentTagsDialog';
+import { CompressionOptionsDialog } from '@/components/CompressionOptionsDialog';
+import { CompressionLevel, compressionUtils } from '@/lib/image-compression';
 
 interface SaveDocumentDialogProps {
   visible: boolean;
   onClose: () => void;
-  onSave: (title: string, tags?: string[], category?: string) => Promise<void>;
+  onSave: (title: string, tags?: string[], category?: string, compressionLevel?: CompressionLevel) => Promise<void>;
   loading?: boolean;
   ocrText?: string;
   receiptData?: any;
   currentTags?: string[];
   currentCategory?: string;
+  imageUri?: string;
+  originalFileSize?: number;
 }
 
 export function SaveDocumentDialog({
@@ -36,13 +40,18 @@ export function SaveDocumentDialog({
   ocrText = '',
   receiptData,
   currentTags = [],
-  currentCategory = ''
+  currentCategory = '',
+  imageUri,
+  originalFileSize = 0
 }: SaveDocumentDialogProps) {
   const [title, setTitle] = useState<string>('');
   const [tags, setTags] = useState<string[]>(currentTags);
   const [category, setCategory] = useState<string>(currentCategory);
   const [saving, setSaving] = useState<boolean>(false);
   const [showTagsDialog, setShowTagsDialog] = useState<boolean>(false);
+  const [showCompressionDialog, setShowCompressionDialog] = useState<boolean>(false);
+  const [compressionLevel, setCompressionLevel] = useState<CompressionLevel>('medium');
+  const [compressionApplied, setCompressionApplied] = useState<boolean>(false);
   const [generatingSuggestion, setGeneratingSuggestion] = useState<boolean>(false);
   const [lastSuggestion, setLastSuggestion] = useState<{
     title: string;
@@ -113,10 +122,12 @@ export function SaveDocumentDialog({
 
     try {
       setSaving(true);
-      await onSave(title.trim(), tags, category);
+      await onSave(title.trim(), tags, category, compressionLevel);
       setTitle('');
       setTags([]);
       setCategory('');
+      setCompressionLevel('medium');
+      setCompressionApplied(false);
       onClose();
     } catch (error) {
       console.error('Error saving document:', error);
@@ -133,6 +144,8 @@ export function SaveDocumentDialog({
       setCategory('');
       setLastSuggestion(null);
       setAutoSuggestionAttempted(false);
+      setCompressionLevel('medium');
+      setCompressionApplied(false);
       onClose();
     }
   };
@@ -142,6 +155,18 @@ export function SaveDocumentDialog({
     if (newCategory) {
       setCategory(newCategory);
     }
+  };
+
+  const handleCompressionApply = (level: CompressionLevel) => {
+    setCompressionLevel(level);
+    setCompressionApplied(true);
+    setShowCompressionDialog(false);
+  };
+
+  const getCompressionLevelLabel = (level: CompressionLevel): string => {
+    return level.split('-').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
   };
 
 
@@ -265,6 +290,52 @@ export function SaveDocumentDialog({
                 )}
               </View>
               
+              <View style={styles.compressionSection}>
+                <View style={styles.compressionSectionHeader}>
+                  <Text style={styles.label}>Image Compression</Text>
+                  <TouchableOpacity
+                    style={styles.compressionButton}
+                    onPress={() => setShowCompressionDialog(true)}
+                    disabled={saving || loading}
+                  >
+                    <Settings size={16} color={Colors.primary} />
+                    <Text style={styles.compressionButtonText}>Options</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.compressionInfo}>
+                  <View style={styles.compressionRow}>
+                    <Text style={styles.compressionLabel}>Level:</Text>
+                    <Text style={styles.compressionValue}>
+                      {getCompressionLevelLabel(compressionLevel)}
+                    </Text>
+                  </View>
+                  
+                  {originalFileSize > 0 && (
+                    <View style={styles.compressionRow}>
+                      <Text style={styles.compressionLabel}>Original Size:</Text>
+                      <Text style={styles.compressionValue}>
+                        {compressionUtils.formatFileSize(originalFileSize)}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {originalFileSize > 0 && (
+                    <View style={styles.compressionRow}>
+                      <Text style={styles.compressionLabel}>Estimated Size:</Text>
+                      <Text style={[styles.compressionValue, styles.estimatedSize]}>
+                        {compressionUtils.formatFileSize(
+                          compressionUtils.estimateSize(originalFileSize, compressionLevel).size
+                        )}
+                        <Text style={styles.spaceSaved}>
+                          {' '}(-{(compressionUtils.estimateSize(originalFileSize, compressionLevel).reduction * 100).toFixed(0)}%)
+                        </Text>
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+              
               {lastSuggestion && (
                 <View style={styles.suggestionInfo}>
                   <Text style={styles.suggestionLabel}>Last AI Suggestion</Text>
@@ -304,6 +375,14 @@ export function SaveDocumentDialog({
         receiptData={receiptData}
         currentTags={tags}
         currentCategory={category}
+      />
+      
+      <CompressionOptionsDialog
+        visible={showCompressionDialog}
+        onClose={() => setShowCompressionDialog(false)}
+        onApply={handleCompressionApply}
+        originalFileSize={originalFileSize}
+        loading={saving || loading}
       />
     </Modal>
   );
@@ -498,5 +577,59 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.gray[600],
     lineHeight: 16,
+  },
+  compressionSection: {
+    marginTop: 16,
+  },
+  compressionSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  compressionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: Colors.gray[100],
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  compressionButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.primary,
+    marginLeft: 4,
+  },
+  compressionInfo: {
+    backgroundColor: Colors.gray[100],
+    padding: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  compressionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  compressionLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.gray[600],
+  },
+  compressionValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.gray[800],
+  },
+  estimatedSize: {
+    color: Colors.green[600],
+  },
+  spaceSaved: {
+    fontSize: 11,
+    color: Colors.green[500],
+    fontWeight: '500',
   },
 });

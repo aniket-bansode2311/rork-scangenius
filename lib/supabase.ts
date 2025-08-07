@@ -30,6 +30,7 @@ export interface DocumentUploadResult {
 export interface SaveDocumentParams {
   title: string;
   imageUri: string;
+  thumbnailUri?: string;
   userId: string;
   ocrText?: string;
   tags?: string[];
@@ -42,6 +43,13 @@ export interface SaveDocumentParams {
     rotation?: number;
     autoCropped?: boolean;
     confidence?: number;
+    compression?: {
+      level: string;
+      originalSize: number;
+      compressedSize: number;
+      compressionRatio: number;
+      format: string;
+    };
   };
 }
 
@@ -129,8 +137,8 @@ export const saveDocumentToDatabase = async (params: SaveDocumentParams): Promis
     const fileName = `document_${timestamp}.jpg`;
     const thumbnailName = `thumbnail_${timestamp}.jpg`;
     
-    // Generate thumbnail
-    const thumbnailUri = await generateThumbnail(params.imageUri);
+    // Use provided thumbnail or generate one
+    const thumbnailUri = params.thumbnailUri || await generateThumbnail(params.imageUri);
     
     // Upload both images to storage
     const [fileUrl, thumbnailUrl] = await Promise.all([
@@ -149,7 +157,8 @@ export const saveDocumentToDatabase = async (params: SaveDocumentParams): Promis
         ocr_text: params.ocrText || null,
         ocr_processed: !!params.ocrText,
         tags: params.tags || [],
-        ai_processed: false
+        ai_processed: false,
+        metadata: params.metadata || null
       })
       .select()
       .single();
