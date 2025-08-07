@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { protectedProcedure } from '../../create-context';
+import { protectedProcedure } from '../../../create-context';
 
 interface TagSuggestion {
   tag: string;
@@ -37,7 +37,13 @@ const PREDEFINED_CATEGORIES = [
   'government',
   'utility',
   'other'
-];
+] as const;
+
+const inputSchema = z.object({
+  ocrText: z.string().min(1, 'OCR text is required'),
+  receiptData: z.any().optional(),
+  currentTags: z.array(z.string()).optional().default([])
+});
 
 const COMMON_TAGS = [
   'urgent',
@@ -314,12 +320,8 @@ function analyzeDocumentContent(ocrText: string, receiptData?: any): TaggingResu
 }
 
 export const suggestTagsProcedure = protectedProcedure
-  .input(z.object({
-    ocrText: z.string().min(1, 'OCR text is required'),
-    receiptData: z.any().optional(),
-    currentTags: z.array(z.string()).optional().default([])
-  }))
-  .mutation(async ({ input }) => {
+  .input(inputSchema)
+  .mutation(async ({ input }: { input: z.infer<typeof inputSchema> }) => {
     try {
       console.log('Analyzing document for tags and categorization:', {
         textLength: input.ocrText.length,
@@ -331,7 +333,7 @@ export const suggestTagsProcedure = protectedProcedure
       
       // Filter out tags that are already present
       const newTags = result.tags.filter(tag => 
-        !input.currentTags.some(currentTag => 
+        !input.currentTags.some((currentTag: string) => 
           currentTag.toLowerCase() === tag.tag.toLowerCase()
         )
       );

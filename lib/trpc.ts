@@ -19,7 +19,7 @@ const getBaseUrl = () => {
   return baseUrl;
 };
 
-// Only create TRPC client if base URL is configured
+// Create TRPC client with better error handling
 const createTRPCClient = () => {
   try {
     return trpc.createClient({
@@ -27,13 +27,40 @@ const createTRPCClient = () => {
         httpLink({
           url: `${getBaseUrl()}/api/trpc`,
           transformer: superjson,
+          // Add error handling for network issues
+          fetch: (url, options) => {
+            // Create timeout signal if AbortSignal.timeout is available
+            let timeoutSignal;
+            try {
+              timeoutSignal = AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined;
+            } catch {
+              console.warn('AbortSignal.timeout not available, skipping timeout');
+              timeoutSignal = undefined;
+            }
+            
+            return fetch(url, {
+              ...options,
+              // Add timeout to prevent hanging requests if available
+              ...(timeoutSignal && { signal: timeoutSignal }),
+            }).catch((error) => {
+              console.error('TRPC fetch error:', error);
+              throw error;
+            });
+          },
         }),
       ],
     });
   } catch (error) {
     console.error('Failed to create TRPC client:', error);
-    // Return a mock client or handle gracefully
-    throw new Error('TRPC client configuration failed. Please check your EXPO_PUBLIC_RORK_API_BASE_URL.');
+    // Create a fallback client that always returns the same structure
+    return trpc.createClient({
+      links: [
+        httpLink({
+          url: 'http://localhost:3000/api/trpc', // Fallback URL
+          transformer: superjson,
+        }),
+      ],
+    });
   }
 };
 
