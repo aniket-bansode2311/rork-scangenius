@@ -1,4 +1,5 @@
-export const Colors = {
+// Define color palette with proper TypeScript types
+const colorPalette = {
   primary: "#3366FF",
   primaryDark: "#2952CC",
   secondary: "#FF6B6B",
@@ -46,4 +47,10 @@ export const Colors = {
     800: "#1E40AF",
     900: "#1E3A8A",
   }
-};
+} as const;
+
+// Export with proper error handling
+export const Colors = colorPalette;
+
+// Type for the Colors object
+export type ColorsType = typeof Colors;
