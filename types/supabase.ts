@@ -37,6 +37,24 @@ export type ReceiptData = {
   extracted_at?: string;
 };
 
+export type DocumentMetadata = {
+  originalUri?: string;
+  perspectiveDistortion?: number;
+  processingSettings?: any;
+  imageAnalysis?: any;
+  filter?: string;
+  rotation?: number;
+  autoCropped?: boolean;
+  confidence?: number;
+  compression?: {
+    level: string;
+    originalSize: number;
+    compressedSize: number;
+    compressionRatio: number;
+    format: string;
+  };
+};
+
 export type Document = {
   id: string;
   user_id: string;
@@ -57,6 +75,7 @@ export type Document = {
   is_signed?: boolean;
   signed_document_url?: string | null;
   signature_data?: SignatureData[];
+  metadata?: DocumentMetadata;
   created_at: string;
   updated_at: string;
 };
@@ -136,6 +155,7 @@ export type Database = {
           is_signed?: boolean;
           signed_document_url?: string | null;
           signature_data?: SignatureData[];
+          metadata?: DocumentMetadata;
         };
         Update: {
           title?: string;
@@ -155,6 +175,7 @@ export type Database = {
           is_signed?: boolean;
           signed_document_url?: string | null;
           signature_data?: SignatureData[];
+          metadata?: DocumentMetadata;
         };
       };
       signatures: {

@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS public.documents (
   is_signed BOOLEAN DEFAULT FALSE,
   signed_document_url TEXT,
   signature_data JSONB,
+  metadata JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -131,6 +132,7 @@ CREATE INDEX IF NOT EXISTS documents_page_order_idx ON public.documents(page_ord
 CREATE INDEX IF NOT EXISTS documents_receipt_data_idx ON public.documents USING gin(receipt_data);
 CREATE INDEX IF NOT EXISTS documents_receipt_processed_idx ON public.documents(receipt_processed);
 CREATE INDEX IF NOT EXISTS documents_is_signed_idx ON public.documents(is_signed);
+CREATE INDEX IF NOT EXISTS documents_metadata_idx ON public.documents USING gin(metadata);
 
 -- Create signatures table for e-signature functionality
 CREATE TABLE IF NOT EXISTS public.signatures (
