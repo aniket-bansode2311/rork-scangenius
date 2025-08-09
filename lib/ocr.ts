@@ -1,6 +1,12 @@
 import { GOOGLE_CLOUD_VISION_API_KEY } from '@/constants/config';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
+import { 
+  createOCRError, 
+  createImageProcessingError, 
+  logError, 
+  getUserErrorMessage 
+} from '@/lib/error-handling';
 
 export interface OCRResult {
   text: string;
@@ -78,8 +84,13 @@ class OCRService {
         });
       }
     } catch (error) {
-      console.error('Error converting image to base64:', error);
-      throw new Error('Failed to process image for OCR');
+      const appError = createImageProcessingError(
+        'Failed to convert image to base64',
+        error instanceof Error ? error : undefined,
+        { imageUri }
+      );
+      logError(appError);
+      throw appError;
     }
   }
 
@@ -114,13 +125,32 @@ class OCRService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Google Vision API error: ${response.status} - ${errorText}`);
+        const error = new Error(`Google Vision API error: ${response.status} - ${errorText}`);
+        
+        // Check for specific error types
+        if (response.status === 429 || errorText.includes('quota')) {
+          error.message = 'OCR quota exceeded. Please try again later.';
+        } else if (response.status === 401 || response.status === 403) {
+          error.message = 'OCR API key is invalid or expired.';
+        }
+        
+        throw error;
       }
 
       const data: GoogleVisionResponse = await response.json();
       
       if (data.responses[0]?.error) {
-        throw new Error(`Google Vision API error: ${data.responses[0].error.message}`);
+        const apiError = data.responses[0].error;
+        const error = new Error(`Google Vision API error: ${apiError.message}`);
+        
+        // Add specific error context
+        if (apiError.message.includes('quota')) {
+          error.message = 'OCR quota exceeded. Please try again later.';
+        } else if (apiError.message.includes('invalid')) {
+          error.message = 'Invalid image format or corrupted file.';
+        }
+        
+        throw error;
       }
 
       return data;
@@ -191,7 +221,13 @@ class OCRService {
 
   async extractText(imageUri: string): Promise<OCRResult> {
     if (!this.apiKey || this.apiKey === 'your-google-cloud-vision-api-key') {
-      throw new Error('Google Cloud Vision API key not configured');
+      const appError = createOCRError(
+        'Google Cloud Vision API key not configured',
+        undefined,
+        { imageUri }
+      );
+      logError(appError);
+      throw appError;
     }
 
     try {
@@ -212,8 +248,19 @@ class OCRService {
       
       return result;
     } catch (error) {
-      console.error('OCR processing failed:', error);
-      throw error;
+      // If it's already an AppError, just re-throw it
+      if (error && typeof error === 'object' && 'type' in error) {
+        throw error;
+      }
+      
+      // Otherwise, wrap it in an OCR error
+      const appError = createOCRError(
+        'OCR processing failed',
+        error instanceof Error ? error : undefined,
+        { imageUri }
+      );
+      logError(appError);
+      throw appError;
     }
   }
 

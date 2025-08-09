@@ -71,12 +71,64 @@ const safeColorAccess = (colorPath: string, fallback: string = "#000000"): strin
   }
 };
 
-// Export with proper error handling and safe access
-export const Colors = {
-  ...colorPalette,
-  // Add safe access method
-  safe: safeColorAccess,
+// Create a safe colors object with fallbacks
+const createSafeColors = () => {
+  const safeGray = {
+    50: "#F8FAFC",
+    100: "#F7F9FC",
+    200: "#EDF1F7",
+    300: "#E4E9F2",
+    400: "#C5CEE0",
+    500: "#8F9BB3",
+    600: "#2E3A59",
+    700: "#222B45",
+    800: "#1A2138",
+    900: "#151A30",
+  };
+  
+  return {
+    primary: colorPalette.primary || "#3366FF",
+    primaryDark: colorPalette.primaryDark || "#2952CC",
+    secondary: colorPalette.secondary || "#FF6B6B",
+    background: colorPalette.background || "#FFFFFF",
+    card: colorPalette.card || "#F7F9FC",
+    text: colorPalette.text || "#2E3A59",
+    border: colorPalette.border || "#E4E9F2",
+    notification: colorPalette.notification || "#FF3D71",
+    success: colorPalette.success || "#00E096",
+    warning: colorPalette.warning || "#FFAA00",
+    error: colorPalette.error || "#FF3D71",
+    gray: colorPalette.gray || safeGray,
+    green: colorPalette.green || {
+      50: "#F0FDF4",
+      100: "#DCFCE7",
+      200: "#BBF7D0",
+      300: "#86EFAC",
+      400: "#4ADE80",
+      500: "#22C55E",
+      600: "#16A34A",
+      700: "#15803D",
+      800: "#166534",
+      900: "#14532D",
+    },
+    blue: colorPalette.blue || {
+      50: "#EFF6FF",
+      100: "#DBEAFE",
+      200: "#BFDBFE",
+      300: "#93C5FD",
+      400: "#60A5FA",
+      500: "#3B82F6",
+      600: "#2563EB",
+      700: "#1D4ED8",
+      800: "#1E40AF",
+      900: "#1E3A8A",
+    },
+    safe: safeColorAccess,
+  };
 };
+
+// Export with proper error handling and safe access
+export const Colors = createSafeColors();
 
 // Type for the Colors object
 export type ColorsType = typeof Colors;
