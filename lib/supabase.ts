@@ -6,6 +6,7 @@ import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
 import { extractTextFromImage, isOCRConfigured, OCRResult } from '@/lib/ocr';
 import { analyzeDocumentContent } from '@/lib/ai-organization';
+import { safeDocumentSave, testDatabaseHealth } from '@/lib/database-migrations';
 
 // Create Supabase client with AsyncStorage for session persistence
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -128,10 +129,49 @@ export const uploadImageToStorage = async (
   }
 };
 
+// Test database connection and schema
+export const testDatabaseConnection = async (): Promise<void> => {
+  try {
+    console.log('Testing database connection and schema...');
+    
+    // Test basic connection
+    const { data: testData, error: testError } = await supabase
+      .from('documents')
+      .select('id')
+      .limit(1);
+    
+    if (testError) {
+      console.error('Database connection test failed:', testError);
+      throw testError;
+    }
+    
+    console.log('Database connection successful');
+    
+    // Test metadata column specifically
+    const { data: metadataTest, error: metadataError } = await supabase
+      .from('documents')
+      .select('metadata')
+      .limit(1);
+    
+    if (metadataError) {
+      console.error('Metadata column test failed:', metadataError);
+      console.log('This suggests the database schema needs to be updated');
+    } else {
+      console.log('Metadata column exists and is accessible');
+    }
+  } catch (error) {
+    console.error('Database test failed:', error);
+    throw error;
+  }
+};
+
 // Save document to database with OCR processing
 export const saveDocumentToDatabase = async (params: SaveDocumentParams): Promise<Document> => {
   try {
     console.log('Saving document to database:', params);
+    
+    // Test database connection first
+    await testDatabaseConnection();
     
     const timestamp = Date.now();
     const fileName = `document_${timestamp}.jpg`;
@@ -146,27 +186,39 @@ export const saveDocumentToDatabase = async (params: SaveDocumentParams): Promis
       uploadImageToStorage(thumbnailUri, thumbnailName)
     ]);
     
-    // Save document metadata to database
-    const { data, error } = await supabase
-      .from('documents')
-      .insert({
-        user_id: params.userId,
-        title: params.title,
-        file_url: fileUrl,
-        thumbnail_url: thumbnailUrl,
-        ocr_text: params.ocrText || null,
-        ocr_processed: !!params.ocrText,
-        tags: params.tags || [],
-        ai_processed: false,
-        metadata: params.metadata || null
-      })
-      .select()
-      .single();
+    // Prepare document data with safe metadata handling
+    const documentData: any = {
+      user_id: params.userId,
+      title: params.title,
+      file_url: fileUrl,
+      thumbnail_url: thumbnailUrl,
+      ocr_text: params.ocrText || null,
+      ocr_processed: !!params.ocrText,
+      tags: params.tags || [],
+      ai_processed: false
+    };
     
-    if (error) {
-      console.error('Database insert error:', error);
-      throw error;
+    // Only add metadata if it exists and the column is available
+    if (params.metadata) {
+      try {
+        // Test if metadata column is accessible
+        const { error: metadataTestError } = await supabase
+          .from('documents')
+          .select('metadata')
+          .limit(1);
+        
+        if (!metadataTestError) {
+          documentData.metadata = params.metadata;
+        } else {
+          console.warn('Metadata column not accessible, skipping metadata save:', metadataTestError);
+        }
+      } catch (metadataError) {
+        console.warn('Metadata column test failed, skipping metadata save:', metadataError);
+      }
     }
+    
+    // Save document metadata to database using safe method
+    const data = await safeDocumentSave(documentData);
     
     console.log('Document saved successfully:', data);
     

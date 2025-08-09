@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useSegments } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
@@ -12,9 +12,16 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const navigationHandled = useRef(false);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading) {
+      navigationHandled.current = false;
+      return;
+    }
+
+    // Prevent multiple navigation attempts
+    if (navigationHandled.current) return;
 
     const inAuthGroup = segments[0] === '(auth)';
     const inTabsGroup = segments[0] === '(tabs)';
@@ -22,35 +29,43 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
     console.log('AuthGuard - User:', user?.email, 'Segments:', segments);
 
-    // Use setTimeout to avoid state updates during render
+    // Use requestAnimationFrame to ensure navigation happens after render
     const handleNavigation = () => {
-      if (!user) {
-        // User is not authenticated
-        if (inTabsGroup) {
-          // Redirect to welcome if trying to access protected routes
-          router.replace('/welcome');
+      try {
+        if (!user) {
+          // User is not authenticated
+          if (inTabsGroup) {
+            // Redirect to welcome if trying to access protected routes
+            router.replace('/welcome');
+            navigationHandled.current = true;
+          }
+          // Allow access to welcome and auth screens
+        } else {
+          // User is authenticated
+          if (inAuthGroup || isWelcome) {
+            // Redirect to main app if trying to access auth screens
+            router.replace('/(tabs)');
+            navigationHandled.current = true;
+          }
+          // Allow access to protected routes
         }
-        // Allow access to welcome and auth screens
-      } else {
-        // User is authenticated
-        if (inAuthGroup || isWelcome) {
-          // Redirect to main app if trying to access auth screens
-          router.replace('/(tabs)');
-        }
-        // Allow access to protected routes
+      } catch (error) {
+        console.error('Navigation error in AuthGuard:', error);
       }
     };
 
-    // Defer navigation to avoid state updates during render
-    const timeoutId = setTimeout(handleNavigation, 0);
+    // Use requestAnimationFrame to defer navigation
+    const frameId = requestAnimationFrame(handleNavigation);
     
-    return () => clearTimeout(timeoutId);
+    return () => {
+      cancelAnimationFrame(frameId);
+    };
   }, [user, loading, segments, router]);
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color={Colors.primary || '#3366FF'} />
       </View>
     );
   }

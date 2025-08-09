@@ -1,4 +1,4 @@
-// Define color palette with proper TypeScript types
+// Define color palette with proper TypeScript types and safe access
 const colorPalette = {
   primary: "#3366FF",
   primaryDark: "#2952CC",
@@ -49,8 +49,34 @@ const colorPalette = {
   }
 } as const;
 
-// Export with proper error handling
-export const Colors = colorPalette;
+// Safe color access function to prevent undefined errors
+const safeColorAccess = (colorPath: string, fallback: string = "#000000"): string => {
+  try {
+    const parts = colorPath.split('.');
+    let current: any = colorPalette;
+    
+    for (const part of parts) {
+      if (current && typeof current === 'object' && part in current) {
+        current = current[part];
+      } else {
+        console.warn(`Color path '${colorPath}' not found, using fallback: ${fallback}`);
+        return fallback;
+      }
+    }
+    
+    return typeof current === 'string' ? current : fallback;
+  } catch (error) {
+    console.warn(`Error accessing color '${colorPath}':`, error);
+    return fallback;
+  }
+};
+
+// Export with proper error handling and safe access
+export const Colors = {
+  ...colorPalette,
+  // Add safe access method
+  safe: safeColorAccess,
+};
 
 // Type for the Colors object
 export type ColorsType = typeof Colors;

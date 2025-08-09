@@ -8,6 +8,8 @@ import { DocumentEditingProvider } from "@/context/DocumentEditingContext";
 import { AuthGuard } from "@/components/AuthGuard";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { trpc, trpcClient } from "@/lib/trpc";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { DiagnosticPanel } from "@/components/DiagnosticPanel";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -32,20 +34,29 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        <SafeAreaProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <AuthProvider>
-              <DocumentEditingProvider>
-                <AuthGuard>
-                  <RootLayoutNav />
-                </AuthGuard>
-              </DocumentEditingProvider>
-            </AuthProvider>
-          </GestureHandlerRootView>
-        </SafeAreaProvider>
-      </QueryClientProvider>
-    </trpc.Provider>
+    <ErrorBoundary>
+      <trpc.Provider client={trpcClient} queryClient={queryClient}>
+        <QueryClientProvider client={queryClient}>
+          <SafeAreaProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <ErrorBoundary>
+                <AuthProvider>
+                  <ErrorBoundary>
+                    <DocumentEditingProvider>
+                      <ErrorBoundary>
+                        <AuthGuard>
+                          <RootLayoutNav />
+                          <DiagnosticPanel />
+                        </AuthGuard>
+                      </ErrorBoundary>
+                    </DocumentEditingProvider>
+                  </ErrorBoundary>
+                </AuthProvider>
+              </ErrorBoundary>
+            </GestureHandlerRootView>
+          </SafeAreaProvider>
+        </QueryClientProvider>
+      </trpc.Provider>
+    </ErrorBoundary>
   );
 }
