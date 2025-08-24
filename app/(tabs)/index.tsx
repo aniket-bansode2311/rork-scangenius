@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Container } from '@/components/Container';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/colors';
-import { Scan } from 'lucide-react-native';
+import { Scan, TestTube } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 export default function HomeScreen() {
@@ -26,6 +26,19 @@ export default function HomeScreen() {
             <Scan size={48} color={Colors.background} />
           </TouchableOpacity>
           <Text style={styles.scanText}>Tap to Scan</Text>
+        </View>
+
+        <View style={styles.quickActions}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <TouchableOpacity 
+            style={styles.actionCard}
+            onPress={() => router.push('/routing-test')}
+            testID="routing-test-button"
+          >
+            <TestTube size={24} color={Colors.primary} />
+            <Text style={styles.actionTitle}>Test Routing</Text>
+            <Text style={styles.actionDescription}>Test all app routes</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.recentScansContainer}>
@@ -108,5 +121,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.gray[500],
     textAlign: 'center',
+  },
+  quickActions: {
+    marginBottom: 32,
+  },
+  actionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.gray[200],
+    shadowColor: Colors.gray[900],
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  actionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.gray[800],
+    marginLeft: 12,
+    flex: 1,
+  },
+  actionDescription: {
+    fontSize: 12,
+    color: Colors.gray[500],
+    marginLeft: 12,
   },
 });

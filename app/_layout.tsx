@@ -24,6 +24,9 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="camera" options={{ headerShown: false }} />
       <Stack.Screen name="photo-preview" options={{ headerShown: false }} />
+      <Stack.Screen name="routing-test" options={{ title: "Routing Test" }} />
+      <Stack.Screen name="document-detail" options={{ title: "Document Detail" }} />
+      <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
     </Stack>
   );
 }
